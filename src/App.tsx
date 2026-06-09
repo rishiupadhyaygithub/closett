@@ -24,7 +24,6 @@ import ClosetView from './components/ClosetView';
 import ColorRulesSettings from './components/ColorRulesSettings';
 import OnboardingModal from './components/OnboardingModal';
 import StyleProfileView from './components/StyleProfileView';
-import AuthModal from './components/AuthModal';
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -57,15 +56,29 @@ function App() {
     setShowOnboarding(false);
   };
 
-  // Auth listener
+  // Auth listener — no login screen; auto sign-in anonymously
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setUser(data.session?.user ?? null);
-      setAuthLoading(false);
-    }).catch(() => {
-      setUser(null);
-      setAuthLoading(false);
-    });
+    const ensureSession = async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        if (data.session?.user) {
+          setUser(data.session.user);
+          setAuthLoading(false);
+          return;
+        }
+        // No session → create anonymous one
+        const { data: anon, error } = await supabase.auth.signInAnonymously();
+        if (error) throw error;
+        setUser(anon.user ?? null);
+      } catch (err) {
+        console.error('anon sign-in failed:', err);
+        setUser(null);
+      } finally {
+        setAuthLoading(false);
+      }
+    };
+    ensureSession();
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       const u = session?.user ?? null;
       setUser(u);
@@ -302,8 +315,6 @@ function App() {
     );
   }
 
-  if (!user) return <AuthModal />;
-
   return (
     <div className="app-shell">
       {/* ── Sidebar ── */}
@@ -373,9 +384,6 @@ function App() {
           </button>
           <button onClick={() => setShowImportModal(true)} className="footer-btn" title="Import backup">
             ↑ Import
-          </button>
-          <button onClick={() => supabase.auth.signOut()} className="footer-btn" title="Sign out">
-            ⎋ Out
           </button>
         </div>
       </aside>
