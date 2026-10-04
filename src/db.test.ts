@@ -91,3 +91,63 @@ describe('deleteItem', () => {
     await expect(deleteItem('i1')).rejects.toThrow('delete item: boom');
   });
 });
+
+import { importData, saveColorRules, validateBackup } from './db';
+
+const GOOD = JSON.stringify({
+  categories: [{ id: 'uncategorized', name: 'Uncategorized', order: 0, parentId: null }],
+  items: [{ id: 'i1', title: 'Shirt' }],
+  colorRules: [{ id: 'rule_white', topColor: 'white', bottomColors: ['black'] }],
+});
+
+describe('validateBackup', () => {
+  it('rejects an item without an id', () => {
+    expect(() => validateBackup({ categories: [], items: [{ title: 'x' }] })).toThrow('item 0');
+  });
+  it('rejects an item with a non-string title', () => {
+    expect(() => validateBackup({ categories: [], items: [{ id: 'a', title: 5 }] })).toThrow('item 0');
+  });
+  it('accepts zero items', () => {
+    expect(validateBackup({ categories: [], items: [] }).items).toEqual([]);
+  });
+});
+
+describe('importData', () => {
+  it('returns false and writes nothing for invalid JSON', async () => {
+    expect(await importData('not json')).toBe(false);
+    expect(h.from).not.toHaveBeenCalled();
+  });
+
+  it('returns false and deletes nothing when an upsert fails', async () => {
+    const b = makeBuilder(FAIL);
+    h.from.mockReturnValue(b);
+    expect(await importData(GOOD)).toBe(false);
+    expect(b.delete).not.toHaveBeenCalled();
+  });
+
+  it('upserts everything, then prunes rows not in the backup', async () => {
+    const b = makeBuilder(OK);
+    h.from.mockReturnValue(b);
+    expect(await importData(GOOD)).toBe(true);
+    expect(b.upsert).toHaveBeenCalledTimes(3);
+    expect(b.delete).toHaveBeenCalledTimes(3);
+    expect(b.not).toHaveBeenCalled();
+  });
+
+  it('clears a table when the backup has zero rows for it', async () => {
+    const b = makeBuilder(OK);
+    h.from.mockReturnValue(b);
+    const empty = JSON.stringify({ categories: [], items: [], colorRules: [] });
+    expect(await importData(empty)).toBe(true);
+    expect(b.delete).toHaveBeenCalled();
+  });
+});
+
+describe('saveColorRules', () => {
+  it('throws and deletes nothing when the upsert fails', async () => {
+    const b = makeBuilder(FAIL);
+    h.from.mockReturnValue(b);
+    await expect(saveColorRules([{ id: 'r', topColor: 'white', bottomColors: [] }])).rejects.toThrow('save color rules');
+    expect(b.delete).not.toHaveBeenCalled();
+  });
+});

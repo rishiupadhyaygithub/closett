@@ -159,12 +159,13 @@ export async function getColorRules(): Promise<ColorRule[]> {
 
 export async function saveColorRules(rules: ColorRule[]): Promise<void> {
   const uid = await currentUserId();
-  await supabase.from('color_rules').delete().eq('user_id', uid);
   if (rules.length > 0) {
-    await supabase.from('color_rules').insert(
-      rules.map(r => ({ id: r.id, user_id: uid, top_color: r.topColor, bottom_colors: r.bottomColors }))
-    );
+    must(await supabase.from('color_rules').upsert(
+      rules.map(r => ({ id: r.id, user_id: uid, top_color: r.topColor, bottom_colors: r.bottomColors })),
+      { onConflict: 'user_id,id' },
+    ), 'save color rules');
   }
+  await pruneMissing('color_rules', uid, rules.map(r => r.id));
 }
 
 // ── User Profile ──────────────────────────────────────────────────────────
@@ -223,21 +224,31 @@ export async function exportData(): Promise<string> {
   return JSON.stringify({ categories, items, colorRules }, null, 2);
 }
 
+export function validateBackup(raw: unknown): { categories: any[]; items: any[]; colorRules: any[] } {
+  const d = raw as any;
+  if (!d || !Array.isArray(d.categories) || !Array.isArray(d.items)) {
+    throw new Error('backup must contain categories and items arrays');
+  }
+  d.categories.forEach((c: any, i: number) => {
+    if (typeof c?.id !== 'string' || typeof c?.name !== 'string') throw new Error(`category ${i} is missing id or name`);
+  });
+  d.items.forEach((it: any, i: number) => {
+    if (typeof it?.id !== 'string' || typeof it?.title !== 'string') throw new Error(`item ${i} is missing id or title`);
+  });
+  const colorRules = Array.isArray(d.colorRules) && d.colorRules.length ? d.colorRules : [...DEFAULT_COLOR_RULES];
+  return { categories: d.categories, items: d.items, colorRules };
+}
+
+async function pruneMissing(table: string, uid: string, keepIds: string[]): Promise<void> {
+  const q = supabase.from(table).delete().eq('user_id', uid);
+  must(await (keepIds.length ? q.not('id', 'in', `(${keepIds.join(',')})`) : q), `prune ${table}`);
+}
+
 export async function importData(jsonString: string): Promise<boolean> {
   try {
-    const data = JSON.parse(jsonString);
-    if (!data.categories || !data.items) return false;
-    if (!data.colorRules?.length) data.colorRules = [...DEFAULT_COLOR_RULES];
-
+    const data = validateBackup(JSON.parse(jsonString));
     const uid = await currentUserId();
-    // Clear existing
-    await Promise.all([
-      supabase.from('categories').delete().eq('user_id', uid),
-      supabase.from('items').delete().eq('user_id', uid),
-      supabase.from('color_rules').delete().eq('user_id', uid),
-    ]);
 
-    // Re-insert
     const cats = data.categories.map((c: any) => ({
       id: c.id, user_id: uid, name: c.name,
       sort_order: c.order ?? 0, parent_id: c.parentId ?? null,
@@ -254,10 +265,14 @@ export async function importData(jsonString: string): Promise<boolean> {
       id: r.id, user_id: uid, top_color: r.topColor, bottom_colors: r.bottomColors,
     }));
 
-    if (cats.length)  await supabase.from('categories').insert(cats);
-    if (its.length)   await supabase.from('items').insert(its);
-    if (rules.length) await supabase.from('color_rules').insert(rules);
+    const opts = { onConflict: 'user_id,id' };
+    if (cats.length)  must(await supabase.from('categories').upsert(cats, opts), 'import categories');
+    if (its.length)   must(await supabase.from('items').upsert(its, opts), 'import items');
+    if (rules.length) must(await supabase.from('color_rules').upsert(rules, opts), 'import color rules');
 
+    await pruneMissing('categories', uid, cats.map((c: any) => c.id));
+    await pruneMissing('items', uid, its.map((i: any) => i.id));
+    await pruneMissing('color_rules', uid, rules.map((r: any) => r.id));
     return true;
   } catch (e) {
     console.error('Import failed', e);
