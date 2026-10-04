@@ -31,6 +31,7 @@ function App() {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const [items, setItems] = useState<Item[]>([]);
   const [colorRules, setColorRules] = useState<ColorRule[]>([]);
@@ -323,13 +324,17 @@ function App() {
         </div>
       )}
       {/* ── Sidebar ── */}
-      <aside className="sidebar">
+      {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}
+      <aside className={`sidebar ${sidebarOpen ? 'sidebar--open' : ''}`}>
         <div className="sidebar-brand">
           <span className="brand-icon">✦</span>
           <span className="brand-name">Closett</span>
         </div>
 
-        <nav className="sidebar-nav">
+        <nav
+          className="sidebar-nav"
+          onClick={e => { if ((e.target as HTMLElement).closest('.nav-item')) setSidebarOpen(false); }}
+        >
           <p className="nav-label">Collections</p>
           <button
             onClick={() => { setActiveView('style'); setSelectedCategory(null); }}
@@ -398,6 +403,7 @@ function App() {
         {/* Header */}
         <header className="main-header">
           <div className="header-left">
+            <button className="menu-btn" onClick={() => setSidebarOpen(true)} aria-label="Open menu">☰</button>
             <h1 className="page-title">
               {activeView === 'style'
                 ? 'My Style'

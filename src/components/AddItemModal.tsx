@@ -168,6 +168,7 @@ export default function AddItemModal({
   const [color, setColor] = useState('');
   const [colorSuggested, setColorSuggested] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const savingRef = useRef(false); // state is stale between two clicks in the same tick
   const [link, setLink] = useState('');
   const [notes, setNotes] = useState('');
   const [categoryId, setCategoryId] = useState('');
@@ -253,7 +254,7 @@ export default function AddItemModal({
   };
 
   const handleSave = async () => {
-    if (!image || !title.trim() || isSaving) return;
+    if (!image || !title.trim() || savingRef.current) return;
     const item: Item = {
       id: editingItem?.id || crypto.randomUUID(),
       image,
@@ -267,11 +268,13 @@ export default function AddItemModal({
       color,
       garmentType,
     };
+    savingRef.current = true;
     setIsSaving(true);
     try {
       const ok = await onSave(item);
       if (ok !== false) resetForm();
     } finally {
+      savingRef.current = false;
       setIsSaving(false);
     }
   };
