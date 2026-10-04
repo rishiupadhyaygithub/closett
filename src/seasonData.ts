@@ -83,7 +83,7 @@ export const SEASON_INFO: Record<ColorSeason, SeasonInfo> = {
     id: 'deep_winter',
     name: 'Deep Winter',
     tagline: 'Jewel tones, dramatic, and cool',
-    description: 'Medium-deep to deep skin with cool undertones — common in Tamil, Malayalee, and Sri Lankan heritage. This is the season Indians are most often mis-typed out of. Jewel tones were made for you.',
+    description: 'Medium-deep to deep skin with cool undertones — a season often mistaken for warm. Jewel tones were made for you.',
     bestColors: ['Emerald Green', 'Sapphire Blue', 'Ruby Red', 'Royal Purple', 'True Black', 'Pure White', 'Icy Pink', 'Magenta', 'Fuchsia', 'Cobalt', 'Deep Teal', 'Ink Blue', 'Hot Pink'],
     avoidColors: ['Mustard', 'Orange', 'Warm Camel', 'Peach', 'Beige', 'Warm Brown', 'Dusty Earth Tones', 'Muted Warm Shades'],
     metals: ['Silver', 'White Gold', 'Platinum', 'Cool Rose Gold'],
@@ -99,7 +99,7 @@ export function deriveColorSeason(skinTone: SkinTone, undertone: Undertone): Col
     fair:     { warm: 'warm_spring',  cool: 'true_winter',  neutral: 'soft_summer', olive: 'soft_autumn' },
     wheatish: { warm: 'true_autumn',  cool: 'soft_summer',  neutral: 'soft_autumn', olive: 'soft_autumn' },
     dusky:    { warm: 'deep_autumn',  cool: 'deep_winter',  neutral: 'deep_autumn', olive: 'deep_autumn' },
-    dark:     { warm: 'deep_autumn',  cool: 'deep_winter',  neutral: 'deep_winter', olive: 'deep_autumn' },
+    dark:     { warm: 'deep_autumn',  cool: 'deep_winter',  neutral: 'deep_autumn', olive: 'deep_autumn' },
   };
   return map[skinTone][undertone];
 }
