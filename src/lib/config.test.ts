@@ -13,3 +13,18 @@ describe('readSupabaseConfig', () => {
     expect(() => readSupabaseConfig({ VITE_SUPABASE_URL: 'https://a.supabase.co' })).toThrow('VITE_SUPABASE_ANON_KEY');
   });
 });
+
+describe('readSupabaseConfig defaults', () => {
+  const DEFAULTS = { url: 'https://d.supabase.co', anonKey: 'dk' };
+
+  it('falls back to defaults when env is empty', () => {
+    expect(readSupabaseConfig({}, DEFAULTS)).toEqual({ url: 'https://d.supabase.co', anonKey: 'dk' });
+  });
+  it('lets env values override defaults', () => {
+    expect(readSupabaseConfig({ VITE_SUPABASE_URL: 'https://e.supabase.co', VITE_SUPABASE_ANON_KEY: 'ek' }, DEFAULTS))
+      .toEqual({ url: 'https://e.supabase.co', anonKey: 'ek' });
+  });
+  it('treats empty-string env values as unset', () => {
+    expect(readSupabaseConfig({ VITE_SUPABASE_URL: '', VITE_SUPABASE_ANON_KEY: '' }, DEFAULTS)).toEqual(DEFAULTS);
+  });
+});
