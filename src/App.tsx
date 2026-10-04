@@ -89,6 +89,7 @@ function App() {
       setColorRules(rules);
     } catch (err) {
       console.error('loadData failed:', err);
+      setErrorMsg(err instanceof Error ? err.message : 'Could not load your closet.');
     }
   }, []);
 
