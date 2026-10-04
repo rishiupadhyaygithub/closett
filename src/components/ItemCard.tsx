@@ -1,5 +1,6 @@
 import { Item } from '../types';
 import { getColorHex, getColorName } from '../colorData';
+import { safeHttpUrl } from '../lib/url';
 
 interface ItemCardProps {
   item: Item;
@@ -9,6 +10,7 @@ interface ItemCardProps {
 }
 
 export default function ItemCard({ item, categoryName, onEdit, onDelete }: ItemCardProps) {
+  const link = safeHttpUrl(item.link);
   const formatPrice = (price: number) => {
     if (!price) return 'No price';
     return new Intl.NumberFormat('en-IN', {
@@ -49,9 +51,9 @@ export default function ItemCard({ item, categoryName, onEdit, onDelete }: ItemC
         </div>
 
         {/* Open link */}
-        {item.link && (
+        {link && (
           <a
-            href={item.link}
+            href={link}
             target="_blank"
             rel="noopener noreferrer"
             className="item-card__open-link"

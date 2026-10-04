@@ -17,7 +17,7 @@ Closett is a personal wardrobe manager with colour recommendations calibrated fo
 | Season colour analysis | ❌ | ✅ 7 seasons mapped to Indian skin profiles |
 | Body type styling | Generic Western rules | ✅ Indian ethnic wear — saree drapes, anarkali, lehenga, sherwani |
 | Outfit builder | ❌ | ✅ 4-step flow: Tops → Layers → Bottoms → Accessories |
-| Closet sync | Local only | ✅ Supabase cloud — works across all devices |
+| Closet storage | Local only | ✅ Supabase cloud, tied to this browser's anonymous session (no cross-device login yet) |
 | Image storage | Base64 bloat | ✅ Supabase Storage (public CDN URLs) |
 | Auto-fill from URL | ❌ | ✅ Paste product link → title, image, price auto-filled |
 | Color pairing rules | ❌ | ✅ 35-color combinatorics engine |

@@ -139,9 +139,10 @@ function App() {
       await loadData();
       return true;
     }, setErrorMsg);
-    if (!ok) return;
+    if (!ok) return false;
     setEditingItem(null);
     setIsAddModalOpen(false);
+    return true;
   };
 
   const handleDeleteItem = async (id: string) => {

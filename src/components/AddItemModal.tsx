@@ -3,11 +3,16 @@ import { Item, Category, ColorRule, UserProfile } from '../types';
 import { COLOR_PALETTE, getColorName, isColorRecommended } from '../colorData';
 import { getBodyTypeAdvice } from '../bodyTypeData';
 import { suggestColorFromImage } from '../lib/imagePixels';
+import { guessCategory, guessGarmentType } from '../lib/guess';
+import { cleanPrice } from '../lib/price';
+import { safeHttpUrl } from '../lib/url';
+import { downscaleDataUrl } from '../lib/downscale';
 
 interface AddItemModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (item: Item) => void;
+  /** Resolve false when the save failed, so the form keeps what the user typed. */
+  onSave: (item: Item) => Promise<boolean | void> | boolean | void;
   categories: Category[];
   editingItem: Item | null;
   colorRules: ColorRule[];
@@ -20,25 +25,6 @@ interface ScrapedData {
   price?: string;
   currency?: string;
   description?: string;
-}
-
-// Smart currency detector from URL hostname
-function detectCurrencyFromUrl(_url: string): string {
-  return 'INR';
-}
-
-// Smart category guesser based on page content
-function guessCategory(title: string, description: string, url: string): string {
-  const text = (title + ' ' + description + ' ' + url).toLowerCase();
-  if (/jean|denim|trouser|pant|legging|shorts|chino/.test(text)) return 'pants';
-  if (/shirt|tee|top|blouse|polo|sweatshirt|hoodie|sweater|pullover/.test(text)) return 'tops';
-  if (/dress|skirt|gown|frock/.test(text)) return 'dresses';
-  if (/shoe|sneaker|boot|heel|sandal|loafer|slipper|footwear/.test(text)) return 'shoes';
-  if (/jacket|coat|blazer|cardigan|vest|waistcoat|parka|windbreaker/.test(text)) return 'outerwear';
-  if (/bag|purse|handbag|backpack|tote|clutch/.test(text)) return 'bags';
-  if (/watch|necklace|bracelet|ring|earring|accessory|accessories|sunglasses|cap|hat|belt|scarf/.test(text)) return 'accessories';
-  if (/underwear|bra|boxer|brief|lingerie|innerwear/.test(text)) return 'innerwear';
-  return '';
 }
 
 async function tryProxy(url: string): Promise<string> {
@@ -148,7 +134,7 @@ async function fetchProductMetadata(url: string): Promise<ScrapedData> {
     'meta[property="og:price:currency"]',
     'meta[name="currency"]',
     'meta[itemprop="priceCurrency"]',
-  ]) || detectCurrencyFromUrl(url);
+  ]) || 'INR';
   
   // Normalize currency to 3-letter code
   const currencyMap: Record<string, string> = {
@@ -159,7 +145,7 @@ async function fetchProductMetadata(url: string): Promise<ScrapedData> {
   
   // Clean price — remove currency symbols, commas, etc.
   if (price) {
-    price = price.replace(/[₹$€£¥,\s]/g, '').replace(/\.(\d{3})/g, '$1').match(/[\d.]+/)?.[0] || '';
+    price = cleanPrice(price);
   }
 
   return { title, image, price, currency, description };
@@ -181,6 +167,7 @@ export default function AddItemModal({
   const [garmentType, setGarmentType] = useState<'top' | 'bottom' | 'layer' | 'accessory' | 'other'>('other');
   const [color, setColor] = useState('');
   const [colorSuggested, setColorSuggested] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [link, setLink] = useState('');
   const [notes, setNotes] = useState('');
   const [categoryId, setCategoryId] = useState('');
@@ -247,8 +234,9 @@ export default function AddItemModal({
   }, [isOpen]);
 
   const handleImageFile = (file: File) => {
+    if (!file.type.startsWith('image/')) return;
     const reader = new FileReader();
-    reader.onload = e => setImage(e.target?.result as string);
+    reader.onload = async e => setImage(await downscaleDataUrl(e.target?.result as string));
     reader.readAsDataURL(file);
   };
 
@@ -264,23 +252,28 @@ export default function AddItemModal({
     if (file && file.type.startsWith('image/')) handleImageFile(file);
   };
 
-  const handleSave = () => {
-    if (!image || !title.trim()) return;
+  const handleSave = async () => {
+    if (!image || !title.trim() || isSaving) return;
     const item: Item = {
       id: editingItem?.id || crypto.randomUUID(),
       image,
       title: title.trim(),
       price: parseFloat(price) || 0,
       currency: 'INR',
-      link: link.trim(),
+      link: safeHttpUrl(link) ?? '',
       notes: notes.trim(),
       categoryId: categoryId || 'uncategorized',
       createdAt: editingItem?.createdAt || Date.now(),
       color,
       garmentType,
     };
-    onSave(item);
-    resetForm();
+    setIsSaving(true);
+    try {
+      const ok = await onSave(item);
+      if (ok !== false) resetForm();
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const resetForm = () => {
@@ -340,6 +333,8 @@ export default function AddItemModal({
 
       // Smart category guess
       if (!editingItem && data.title) {
+        const guessedType = guessGarmentType(data.title, data.description || '', url);
+        if (guessedType !== 'other' && garmentType === 'other') setGarmentType(guessedType);
         const guessed = guessCategory(data.title, data.description || '', url);
         if (guessed) {
           // Find existing category by name (case-insensitive)
@@ -654,10 +649,10 @@ export default function AddItemModal({
           <button onClick={handleClose} className="btn-ghost">Cancel</button>
           <button
             onClick={handleSave}
-            disabled={!image || !title.trim()}
+            disabled={!image || !title.trim() || isSaving}
             className="btn-primary"
           >
-            {editingItem ? 'Save Changes' : 'Add to Wardrobe'}
+            {isSaving ? 'Saving…' : editingItem ? 'Save Changes' : 'Add to Wardrobe'}
           </button>
         </div>
       </div>
