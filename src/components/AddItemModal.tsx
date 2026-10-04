@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Item, Category, ColorRule, UserProfile } from '../types';
 import { COLOR_PALETTE, getColorName, isColorRecommended } from '../colorData';
 import { getBodyTypeAdvice } from '../bodyTypeData';
+import { suggestColorFromImage } from '../lib/imagePixels';
 
 interface AddItemModalProps {
   isOpen: boolean;
@@ -179,6 +180,7 @@ export default function AddItemModal({
   const [_currency, setCurrency] = useState('INR');
   const [garmentType, setGarmentType] = useState<'top' | 'bottom' | 'layer' | 'accessory' | 'other'>('other');
   const [color, setColor] = useState('');
+  const [colorSuggested, setColorSuggested] = useState(false);
   const [link, setLink] = useState('');
   const [notes, setNotes] = useState('');
   const [categoryId, setCategoryId] = useState('');
@@ -201,12 +203,25 @@ export default function AddItemModal({
       setNotes(editingItem.notes);
       setCategoryId(editingItem.categoryId);
       setColor(editingItem.color || '');
+      setColorSuggested(false);
       setGarmentType(editingItem.garmentType || 'other');
       setUrlInput(editingItem.link || '');
     } else {
       resetForm();
     }
   }, [editingItem, categories, isOpen]);
+
+  // Suggest a colour from the photo, but never overwrite a colour the user picked
+  useEffect(() => {
+    if (!image || (color && !colorSuggested)) return;
+    let cancelled = false;
+    suggestColorFromImage(image).then(id => {
+      if (cancelled || !id) return;
+      setColor(id);
+      setColorSuggested(true);
+    });
+    return () => { cancelled = true; };
+  }, [image]);
 
   // Handle Ctrl+V / Cmd+V paste of images
   useEffect(() => {
@@ -276,6 +291,7 @@ export default function AddItemModal({
     setLink('');
     setNotes('');
     setColor('');
+    setColorSuggested(false);
     setGarmentType('other');
     setCategoryId(categories.find(c => c.id === 'uncategorized')?.id || categories[0]?.id || '');
     setUrlInput('');
@@ -514,6 +530,9 @@ export default function AddItemModal({
           <div className="field-group">
             <div className="color-label-row">
               <label className="field-label" style={{ margin: 0 }}>Dominant Color</label>
+              {colorSuggested && color && (
+                <span className="tone-badge" data-testid="color-suggested">✦ Suggested from photo. Change it if it's wrong.</span>
+              )}
               {userProfile?.undertone && (
                 <span className="tone-badge">
                   ◈ {userProfile.undertone.charAt(0).toUpperCase() + userProfile.undertone.slice(1)} undertone
@@ -534,7 +553,7 @@ export default function AddItemModal({
                 <div className="color-chips">
                   <button
                     type="button"
-                    onClick={() => setColor('')}
+                    onClick={() => { setColor(''); setColorSuggested(false); }}
                     className={`color-chip color-chip--none ${!color ? 'color-chip--active' : ''}`}
                     title="No colour"
                   >🚫</button>
@@ -561,7 +580,7 @@ export default function AddItemModal({
                           <div key={c.id} className="color-chip-wrap" title={`${c.name}${rec === true ? ' ✓ Recommended for your undertone' : rec === false ? ' ✕ May clash with undertone' : ''}`}>
                             <button
                               type="button"
-                              onClick={() => setColor(c.id)}
+                              onClick={() => { setColor(c.id); setColorSuggested(false); }}
                               className={`color-chip ${color === c.id ? 'color-chip--active' : ''} ${rec === false ? 'color-chip--avoid' : ''}`}
                               style={{ backgroundColor: c.hex }}
                             />
