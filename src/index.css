@@ -2545,3 +2545,6 @@ body {
   margin: 0 0 12px;
   font-family: 'Playfair Display', serif;
 }
+
+.error-banner { position: fixed; top: 0; left: 0; right: 0; z-index: 1000; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 16px; background: #b3261e; color: #fff; font-size: 14px; }
+.error-banner button { background: none; border: 0; color: inherit; cursor: pointer; font-size: 16px; }

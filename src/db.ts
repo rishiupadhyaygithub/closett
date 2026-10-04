@@ -11,6 +11,17 @@ async function currentUserId(): Promise<string> {
   return uid;
 }
 
+export function must<T extends { error: { message: string } | null }>(res: T, what: string): T {
+  if (res.error) throw new Error(`${what}: ${res.error.message}`);
+  return res;
+}
+
+export function storagePathFromUrl(url: string): string | null {
+  const marker = '/item-images/';
+  const i = url.indexOf(marker);
+  return i === -1 ? null : decodeURIComponent(url.slice(i + marker.length).split('?')[0]);
+}
+
 function rowToCategory(row: any): Category {
   return { id: row.id, name: row.name, order: row.sort_order, parentId: row.parent_id };
 }
@@ -45,10 +56,10 @@ export async function getAllCategories(): Promise<Category[]> {
 
 export async function addCategory(category: Category): Promise<void> {
   const uid = await currentUserId();
-  await supabase.from('categories').upsert({
+  must(await supabase.from('categories').upsert({
     id: category.id, user_id: uid,
     name: category.name, sort_order: category.order, parent_id: category.parentId,
-  });
+  }, { onConflict: 'user_id,id' }), 'save category');
 }
 
 export async function updateCategory(category: Category): Promise<void> {
@@ -72,12 +83,12 @@ export async function deleteCategory(id: string): Promise<void> {
   }
 
   // Move items to uncategorized
-  await supabase.from('items')
+  must(await supabase.from('items')
     .update({ category_id: 'uncategorized' })
     .eq('user_id', uid)
-    .in('category_id', Array.from(toDelete));
+    .in('category_id', Array.from(toDelete)), 'move items to uncategorized');
 
-  await supabase.from('categories').delete().eq('user_id', uid).in('id', Array.from(toDelete));
+  must(await supabase.from('categories').delete().eq('user_id', uid).in('id', Array.from(toDelete)), 'delete category');
 }
 
 // ── Items ─────────────────────────────────────────────────────────────────
@@ -96,12 +107,12 @@ export async function addItem(item: Item): Promise<void> {
   if (imageUrl.startsWith('data:')) {
     imageUrl = await uploadImage(uid, item.id, imageUrl);
   }
-  await supabase.from('items').insert({
+  must(await supabase.from('items').insert({
     id: item.id, user_id: uid, image: imageUrl,
     title: item.title, price: item.price, currency: item.currency,
     link: item.link, notes: item.notes, category_id: item.categoryId,
     created_at: item.createdAt, color: item.color, garment_type: item.garmentType,
-  });
+  }), 'insert item');
 }
 
 export async function updateItem(item: Item): Promise<void> {
@@ -110,16 +121,23 @@ export async function updateItem(item: Item): Promise<void> {
   if (imageUrl.startsWith('data:')) {
     imageUrl = await uploadImage(uid, item.id, imageUrl);
   }
-  await supabase.from('items').update({
+  must(await supabase.from('items').update({
     image: imageUrl, title: item.title, price: item.price, currency: item.currency,
     link: item.link, notes: item.notes, category_id: item.categoryId,
     color: item.color, garment_type: item.garmentType,
-  }).eq('id', item.id).eq('user_id', uid);
+  }).eq('id', item.id).eq('user_id', uid), 'update item');
 }
 
 export async function deleteItem(id: string): Promise<void> {
   const uid = await currentUserId();
-  await supabase.from('items').delete().eq('id', id).eq('user_id', uid);
+  const { data } = await supabase.from('items').select('image').eq('id', id).eq('user_id', uid).maybeSingle();
+  must(await supabase.from('items').delete().eq('id', id).eq('user_id', uid), 'delete item');
+
+  const path = data?.image ? storagePathFromUrl(String(data.image)) : null;
+  if (path) {
+    const { error } = await supabase.storage.from('item-images').remove([path]);
+    if (error) console.warn('image cleanup failed:', error.message);
+  }
 }
 
 export async function getItemsByCategory(categoryId: string): Promise<Item[]> {
@@ -141,12 +159,13 @@ export async function getColorRules(): Promise<ColorRule[]> {
 
 export async function saveColorRules(rules: ColorRule[]): Promise<void> {
   const uid = await currentUserId();
-  await supabase.from('color_rules').delete().eq('user_id', uid);
   if (rules.length > 0) {
-    await supabase.from('color_rules').insert(
-      rules.map(r => ({ id: r.id, user_id: uid, top_color: r.topColor, bottom_colors: r.bottomColors }))
-    );
+    must(await supabase.from('color_rules').upsert(
+      rules.map(r => ({ id: r.id, user_id: uid, top_color: r.topColor, bottom_colors: r.bottomColors })),
+      { onConflict: 'user_id,id' },
+    ), 'save color rules');
   }
+  await pruneMissing('color_rules', uid, rules.map(r => r.id));
 }
 
 // ── User Profile ──────────────────────────────────────────────────────────
@@ -167,14 +186,14 @@ export async function getUserProfileRemote(): Promise<UserProfile | null> {
 
 export async function saveUserProfileRemote(profile: UserProfile): Promise<void> {
   const uid = await currentUserId();
-  await supabase.from('user_profiles').upsert({
+  must(await supabase.from('user_profiles').upsert({
     id: uid,
     gender: profile.gender,
     skin_tone: profile.skinTone,
     undertone: profile.undertone,
     body_type: profile.bodyType,
     updated_at: new Date().toISOString(),
-  });
+  }), 'save profile');
 }
 
 // Keep local fallback for profile (fast reads)
@@ -205,21 +224,31 @@ export async function exportData(): Promise<string> {
   return JSON.stringify({ categories, items, colorRules }, null, 2);
 }
 
+export function validateBackup(raw: unknown): { categories: any[]; items: any[]; colorRules: any[] } {
+  const d = raw as any;
+  if (!d || !Array.isArray(d.categories) || !Array.isArray(d.items)) {
+    throw new Error('backup must contain categories and items arrays');
+  }
+  d.categories.forEach((c: any, i: number) => {
+    if (typeof c?.id !== 'string' || typeof c?.name !== 'string') throw new Error(`category ${i} is missing id or name`);
+  });
+  d.items.forEach((it: any, i: number) => {
+    if (typeof it?.id !== 'string' || typeof it?.title !== 'string') throw new Error(`item ${i} is missing id or title`);
+  });
+  const colorRules = Array.isArray(d.colorRules) && d.colorRules.length ? d.colorRules : [...DEFAULT_COLOR_RULES];
+  return { categories: d.categories, items: d.items, colorRules };
+}
+
+async function pruneMissing(table: string, uid: string, keepIds: string[]): Promise<void> {
+  const q = supabase.from(table).delete().eq('user_id', uid);
+  must(await (keepIds.length ? q.not('id', 'in', `(${keepIds.join(',')})`) : q), `prune ${table}`);
+}
+
 export async function importData(jsonString: string): Promise<boolean> {
   try {
-    const data = JSON.parse(jsonString);
-    if (!data.categories || !data.items) return false;
-    if (!data.colorRules?.length) data.colorRules = [...DEFAULT_COLOR_RULES];
-
+    const data = validateBackup(JSON.parse(jsonString));
     const uid = await currentUserId();
-    // Clear existing
-    await Promise.all([
-      supabase.from('categories').delete().eq('user_id', uid),
-      supabase.from('items').delete().eq('user_id', uid),
-      supabase.from('color_rules').delete().eq('user_id', uid),
-    ]);
 
-    // Re-insert
     const cats = data.categories.map((c: any) => ({
       id: c.id, user_id: uid, name: c.name,
       sort_order: c.order ?? 0, parent_id: c.parentId ?? null,
@@ -236,10 +265,14 @@ export async function importData(jsonString: string): Promise<boolean> {
       id: r.id, user_id: uid, top_color: r.topColor, bottom_colors: r.bottomColors,
     }));
 
-    if (cats.length)  await supabase.from('categories').insert(cats);
-    if (its.length)   await supabase.from('items').insert(its);
-    if (rules.length) await supabase.from('color_rules').insert(rules);
+    const opts = { onConflict: 'user_id,id' };
+    if (cats.length)  must(await supabase.from('categories').upsert(cats, opts), 'import categories');
+    if (its.length)   must(await supabase.from('items').upsert(its, opts), 'import items');
+    if (rules.length) must(await supabase.from('color_rules').upsert(rules, opts), 'import color rules');
 
+    await pruneMissing('categories', uid, cats.map((c: any) => c.id));
+    await pruneMissing('items', uid, its.map((i: any) => i.id));
+    await pruneMissing('color_rules', uid, rules.map((r: any) => r.id));
     return true;
   } catch (e) {
     console.error('Import failed', e);

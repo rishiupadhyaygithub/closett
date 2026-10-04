@@ -17,6 +17,8 @@ import {
   getUserProfileRemote,
 } from './db';
 import { supabase } from './lib/supabase';
+import { ensureSession } from './lib/session';
+import { runAction } from './lib/actions';
 import type { User } from '@supabase/supabase-js';
 import ItemCard from './components/ItemCard';
 import AddItemModal from './components/AddItemModal';
@@ -28,6 +30,7 @@ import StyleProfileView from './components/StyleProfileView';
 function App() {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [items, setItems] = useState<Item[]>([]);
   const [colorRules, setColorRules] = useState<ColorRule[]>([]);
@@ -58,26 +61,13 @@ function App() {
 
   // Auth listener — no login screen; auto sign-in anonymously
   useEffect(() => {
-    const ensureSession = async () => {
-      try {
-        const { data } = await supabase.auth.getSession();
-        if (data.session?.user) {
-          setUser(data.session.user);
-          setAuthLoading(false);
-          return;
-        }
-        // No session → create anonymous one
-        const { data: anon, error } = await supabase.auth.signInAnonymously();
-        if (error) throw error;
-        setUser(anon.user ?? null);
-      } catch (err) {
-        console.error('anon sign-in failed:', err);
-        setUser(null);
-      } finally {
-        setAuthLoading(false);
-      }
+    const start = async () => {
+      const { user: u, error } = await ensureSession(supabase);
+      setUser(u);
+      if (error) setErrorMsg(error);
+      setAuthLoading(false);
     };
-    ensureSession();
+    start();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       const u = session?.user ?? null;
@@ -99,6 +89,7 @@ function App() {
       setColorRules(rules);
     } catch (err) {
       console.error('loadData failed:', err);
+      setErrorMsg(err instanceof Error ? err.message : 'Could not load your closet.');
     }
   }, []);
 
@@ -118,42 +109,49 @@ function App() {
       order: categories.length,
       parentId: categoryToAddChildTo,
     };
-    await addCategory(newCategory);
+    const ok = await runAction(async () => {
+      await addCategory(newCategory);
+      await loadData();
+      return true;
+    }, setErrorMsg);
+    if (!ok) return;
     setNewCategoryName('');
     setShowAddCategory(false);
     setCategoryToAddChildTo(null);
     if (categoryToAddChildTo) {
       setOpenCategories(prev => new Set(prev).add(categoryToAddChildTo));
     }
-    await loadData();
   };
 
   const handleDeleteCategory = async (id: string) => {
     if (!confirm('Delete this category? Items will be moved to Uncategorized.')) return;
-    await deleteCategory(id); // db.ts already migrates items internally
-    if (selectedCategory === id) setSelectedCategory(null);
-    await loadData();
+    const ok = await runAction(async () => {
+      await deleteCategory(id); // db.ts already migrates items internally
+      await loadData();
+      return true;
+    }, setErrorMsg);
+    if (ok && selectedCategory === id) setSelectedCategory(null);
   };
 
   const handleSaveItem = async (item: Item) => {
-    if (editingItem) {
-      await updateItem(item);
-    } else {
-      await addItem(item);
-    }
+    const ok = await runAction(async () => {
+      if (editingItem) await updateItem(item); else await addItem(item);
+      await loadData();
+      return true;
+    }, setErrorMsg);
+    if (!ok) return;
     setEditingItem(null);
     setIsAddModalOpen(false);
-    await loadData();
   };
 
   const handleDeleteItem = async (id: string) => {
     if (!confirm('Delete this item?')) return;
-    await deleteItem(id);
-    await loadData();
+    await runAction(async () => { await deleteItem(id); await loadData(); }, setErrorMsg);
   };
 
   const handleExport = async () => {
-    const data = await exportData();
+    const data = await runAction(exportData, setErrorMsg);
+    if (data === undefined) return;
     const blob = new Blob([data], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -317,6 +315,12 @@ function App() {
 
   return (
     <div className="app-shell">
+      {errorMsg && (
+        <div className="error-banner" role="alert">
+          <span>{errorMsg}</span>
+          <button onClick={() => setErrorMsg(null)} aria-label="Dismiss">✕</button>
+        </div>
+      )}
       {/* ── Sidebar ── */}
       <aside className="sidebar">
         <div className="sidebar-brand">
@@ -523,7 +527,9 @@ function App() {
         isOpen={showColorRulesSettings}
         onClose={() => setShowColorRulesSettings(false)}
         rules={colorRules}
-        onSave={async (rules) => { await saveColorRules(rules); await loadData(); }}
+        onSave={async (rules) => {
+          await runAction(async () => { await saveColorRules(rules); await loadData(); }, setErrorMsg);
+        }}
       />
 
       {/* ── Onboarding ── */}

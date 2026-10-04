@@ -30,7 +30,7 @@ Closett is a personal wardrobe manager with colour recommendations calibrated fo
 |---|---|
 | Frontend | React 18, TypeScript, Vite |
 | Styling | Tailwind CSS + custom CSS variables |
-| Auth | Supabase Auth (email/password) |
+| Auth | Supabase Auth (anonymous sessions) |
 | Database | Supabase PostgreSQL (RLS on all tables) |
 | Storage | Supabase Storage (`item-images` bucket) |
 | Deployment | Vercel (auto-deploy on push) |
@@ -39,7 +39,7 @@ Closett is a personal wardrobe manager with colour recommendations calibrated fo
 
 ## Features
 
-- **Auth** — email/password signup + login, session persists across devices
+- **Sessions** — anonymous sign-in, no login screen. The closet is tied to this browser session, so clearing site data loses access to it
 - **Onboarding** — 4-step quiz: gender → skin overtone → undertone → body type
 - **Undertone engine** — warm / cool / neutral / olive; biologically independent of skin depth. Fixes the "dark = warm" myth common in Indian styling advice
 - **Season derivation** — overtone × undertone → one of 7 Indian-relevant colour seasons (Deep Autumn, Deep Winter, True Autumn, Warm Spring, Soft Summer, Soft Autumn, True Winter)
@@ -57,11 +57,12 @@ Closett is a personal wardrobe manager with colour recommendations calibrated fo
 ## Running locally
 
 ```bash
-npm install
-npm run dev
+bun install
+cp .env.example .env   # then fill in your Supabase URL and anon key
+bun run dev
 ```
 
-No `.env` needed — Supabase keys are public anon keys (protected by Row Level Security).
+Needs a Supabase project with **Anonymous sign-ins** enabled. Apply `supabase/migrations/001_composite_keys_and_image_update.sql` to an existing project. The anon key is public by design; the data is protected by Row Level Security. `.env` is git-ignored. Run tests with `bun run test`.
 
 ---
 
@@ -74,10 +75,12 @@ src/
   seasonData.ts         ← 7 colour seasons, deriveColorSeason(skinTone, undertone)
   bodyTypeData.ts       ← 10 body types (5M + 5F) with Indian ethnic wear advice
   db.ts                 ← all Supabase CRUD (categories, items, color rules, profiles)
+  lib/config.ts         ← reads VITE_SUPABASE_* env vars, fails loudly if missing
   lib/supabase.ts       ← Supabase client + uploadImage() base64→Storage
+  lib/session.ts        ← ensureSession(): reuse or create an anonymous session
+  lib/actions.ts        ← runAction(): turns thrown errors into the error banner
 
   components/
-    AuthModal.tsx           ← email/password login + signup
     OnboardingModal.tsx     ← 4-step profile quiz
     StyleProfileView.tsx    ← My Style page (season, palette, body type, ethnic wear)
     ClosetView.tsx          ← outfit builder (4-section flow + undertone chip hints)
@@ -92,10 +95,10 @@ src/
 ### Supabase schema
 
 ```sql
-categories    (id, user_id, name, sort_order, parent_id)
-items         (id, user_id, image, title, price, currency, link, notes,
+categories    (user_id, id, name, sort_order, parent_id)        PK (user_id, id)
+items         (user_id, id, image, title, price, currency, link, notes,
                category_id, created_at, color, garment_type)
-color_rules   (id, user_id, top_color, bottom_colors[])
+color_rules   (user_id, id, top_color, bottom_colors[])      PK (user_id, id)
 user_profiles (id, gender, skin_tone, undertone, body_type, updated_at)
 ```
 
