@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Gender, SkinTone, Undertone, BodyType, UserProfile } from '../types';
-import { MALE_BODY_TYPES, FEMALE_BODY_TYPES } from '../bodyTypeData';
+import { bodyTypesForGender } from '../bodyTypeData';
 
 interface OnboardingModalProps {
   onComplete: (profile: UserProfile) => void;
@@ -51,10 +51,7 @@ export default function OnboardingModal({ onComplete }: OnboardingModalProps) {
   const [undertone, setUndertone] = useState<Undertone | null>(null);
   const [bodyType, setBodyType] = useState<BodyType | null>(null);
 
-  const bodyTypes =
-    gender === 'male'   ? MALE_BODY_TYPES :
-    gender === 'female' ? FEMALE_BODY_TYPES :
-    [...MALE_BODY_TYPES, ...FEMALE_BODY_TYPES];
+  const bodyTypes = bodyTypesForGender(gender ?? 'other');
 
   const canNext = () => {
     if (step === 1) return !!gender;
