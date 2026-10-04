@@ -11,6 +11,17 @@ async function currentUserId(): Promise<string> {
   return uid;
 }
 
+export function must<T extends { error: { message: string } | null }>(res: T, what: string): T {
+  if (res.error) throw new Error(`${what}: ${res.error.message}`);
+  return res;
+}
+
+export function storagePathFromUrl(url: string): string | null {
+  const marker = '/item-images/';
+  const i = url.indexOf(marker);
+  return i === -1 ? null : decodeURIComponent(url.slice(i + marker.length).split('?')[0]);
+}
+
 function rowToCategory(row: any): Category {
   return { id: row.id, name: row.name, order: row.sort_order, parentId: row.parent_id };
 }
@@ -45,10 +56,10 @@ export async function getAllCategories(): Promise<Category[]> {
 
 export async function addCategory(category: Category): Promise<void> {
   const uid = await currentUserId();
-  await supabase.from('categories').upsert({
+  must(await supabase.from('categories').upsert({
     id: category.id, user_id: uid,
     name: category.name, sort_order: category.order, parent_id: category.parentId,
-  });
+  }, { onConflict: 'user_id,id' }), 'save category');
 }
 
 export async function updateCategory(category: Category): Promise<void> {
@@ -96,12 +107,12 @@ export async function addItem(item: Item): Promise<void> {
   if (imageUrl.startsWith('data:')) {
     imageUrl = await uploadImage(uid, item.id, imageUrl);
   }
-  await supabase.from('items').insert({
+  must(await supabase.from('items').insert({
     id: item.id, user_id: uid, image: imageUrl,
     title: item.title, price: item.price, currency: item.currency,
     link: item.link, notes: item.notes, category_id: item.categoryId,
     created_at: item.createdAt, color: item.color, garment_type: item.garmentType,
-  });
+  }), 'insert item');
 }
 
 export async function updateItem(item: Item): Promise<void> {
@@ -110,16 +121,23 @@ export async function updateItem(item: Item): Promise<void> {
   if (imageUrl.startsWith('data:')) {
     imageUrl = await uploadImage(uid, item.id, imageUrl);
   }
-  await supabase.from('items').update({
+  must(await supabase.from('items').update({
     image: imageUrl, title: item.title, price: item.price, currency: item.currency,
     link: item.link, notes: item.notes, category_id: item.categoryId,
     color: item.color, garment_type: item.garmentType,
-  }).eq('id', item.id).eq('user_id', uid);
+  }).eq('id', item.id).eq('user_id', uid), 'update item');
 }
 
 export async function deleteItem(id: string): Promise<void> {
   const uid = await currentUserId();
-  await supabase.from('items').delete().eq('id', id).eq('user_id', uid);
+  const { data } = await supabase.from('items').select('image').eq('id', id).eq('user_id', uid).maybeSingle();
+  must(await supabase.from('items').delete().eq('id', id).eq('user_id', uid), 'delete item');
+
+  const path = data?.image ? storagePathFromUrl(String(data.image)) : null;
+  if (path) {
+    const { error } = await supabase.storage.from('item-images').remove([path]);
+    if (error) console.warn('image cleanup failed:', error.message);
+  }
 }
 
 export async function getItemsByCategory(categoryId: string): Promise<Item[]> {
