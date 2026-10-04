@@ -151,3 +151,46 @@ describe('saveColorRules', () => {
     expect(b.delete).not.toHaveBeenCalled();
   });
 });
+
+import { deleteCategory, saveUserProfileRemote } from './db';
+
+describe('deleteCategory', () => {
+  const cats = [
+    { id: 'c1', user_id: 'u1', name: 'A', sort_order: 0, parent_id: null },
+    { id: 'c2', user_id: 'u1', name: 'B', sort_order: 1, parent_id: 'c1' },
+  ];
+
+  it('rejects when moving items to uncategorized fails', async () => {
+    h.from
+      .mockReturnValueOnce(makeBuilder({ data: cats, error: null }))
+      .mockReturnValueOnce(makeBuilder(FAIL));
+    await expect(deleteCategory('c1')).rejects.toThrow('move items');
+  });
+
+  it('does not delete categories when moving items failed', async () => {
+    const del = makeBuilder(OK);
+    h.from
+      .mockReturnValueOnce(makeBuilder({ data: cats, error: null }))
+      .mockReturnValueOnce(makeBuilder(FAIL))
+      .mockReturnValueOnce(del);
+    await expect(deleteCategory('c1')).rejects.toThrow();
+    expect(del.delete).not.toHaveBeenCalled();
+  });
+
+  it('rejects when the category delete fails', async () => {
+    h.from
+      .mockReturnValueOnce(makeBuilder({ data: cats, error: null }))
+      .mockReturnValueOnce(makeBuilder(OK))
+      .mockReturnValueOnce(makeBuilder(FAIL));
+    await expect(deleteCategory('c1')).rejects.toThrow('delete category');
+  });
+});
+
+describe('saveUserProfileRemote', () => {
+  it('rejects when the upsert fails', async () => {
+    h.from.mockReturnValue(makeBuilder(FAIL));
+    await expect(
+      saveUserProfileRemote({ gender: 'male', skinTone: 'fair', undertone: 'warm', bodyType: 'rectangle' }),
+    ).rejects.toThrow('save profile');
+  });
+});

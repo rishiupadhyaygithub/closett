@@ -109,21 +109,28 @@ function App() {
       order: categories.length,
       parentId: categoryToAddChildTo,
     };
-    await addCategory(newCategory);
+    const ok = await runAction(async () => {
+      await addCategory(newCategory);
+      await loadData();
+      return true;
+    }, setErrorMsg);
+    if (!ok) return;
     setNewCategoryName('');
     setShowAddCategory(false);
     setCategoryToAddChildTo(null);
     if (categoryToAddChildTo) {
       setOpenCategories(prev => new Set(prev).add(categoryToAddChildTo));
     }
-    await loadData();
   };
 
   const handleDeleteCategory = async (id: string) => {
     if (!confirm('Delete this category? Items will be moved to Uncategorized.')) return;
-    await deleteCategory(id); // db.ts already migrates items internally
-    if (selectedCategory === id) setSelectedCategory(null);
-    await loadData();
+    const ok = await runAction(async () => {
+      await deleteCategory(id); // db.ts already migrates items internally
+      await loadData();
+      return true;
+    }, setErrorMsg);
+    if (ok && selectedCategory === id) setSelectedCategory(null);
   };
 
   const handleSaveItem = async (item: Item) => {
@@ -143,7 +150,8 @@ function App() {
   };
 
   const handleExport = async () => {
-    const data = await exportData();
+    const data = await runAction(exportData, setErrorMsg);
+    if (data === undefined) return;
     const blob = new Blob([data], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');

@@ -83,12 +83,12 @@ export async function deleteCategory(id: string): Promise<void> {
   }
 
   // Move items to uncategorized
-  await supabase.from('items')
+  must(await supabase.from('items')
     .update({ category_id: 'uncategorized' })
     .eq('user_id', uid)
-    .in('category_id', Array.from(toDelete));
+    .in('category_id', Array.from(toDelete)), 'move items to uncategorized');
 
-  await supabase.from('categories').delete().eq('user_id', uid).in('id', Array.from(toDelete));
+  must(await supabase.from('categories').delete().eq('user_id', uid).in('id', Array.from(toDelete)), 'delete category');
 }
 
 // ── Items ─────────────────────────────────────────────────────────────────
@@ -186,14 +186,14 @@ export async function getUserProfileRemote(): Promise<UserProfile | null> {
 
 export async function saveUserProfileRemote(profile: UserProfile): Promise<void> {
   const uid = await currentUserId();
-  await supabase.from('user_profiles').upsert({
+  must(await supabase.from('user_profiles').upsert({
     id: uid,
     gender: profile.gender,
     skin_tone: profile.skinTone,
     undertone: profile.undertone,
     body_type: profile.bodyType,
     updated_at: new Date().toISOString(),
-  });
+  }), 'save profile');
 }
 
 // Keep local fallback for profile (fast reads)
