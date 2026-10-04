@@ -58,11 +58,10 @@ Closett is a personal wardrobe manager with colour recommendations calibrated fo
 
 ```bash
 bun install
-cp .env.example .env   # then fill in your Supabase URL and anon key
 bun run dev
 ```
 
-Needs a Supabase project with **Anonymous sign-ins** enabled. Apply `supabase/migrations/001_composite_keys_and_image_update.sql` to an existing project. The anon key is public by design; the data is protected by Row Level Security. `.env` is git-ignored. Run tests with `bun run test`.
+Needs a Supabase project with **Anonymous sign-ins** enabled. Apply `supabase/migrations/001_composite_keys_and_image_update.sql` to an existing project. The anon key is public by design; the data is protected by Row Level Security. Built-in defaults in `src/lib/defaults.ts` point at this project, so no `.env` is needed. To use a different Supabase project, copy `.env.example` to `.env` (git-ignored) or set the same variables in Vercel; they override the defaults. Run tests with `bun run test`.
 
 ---
 

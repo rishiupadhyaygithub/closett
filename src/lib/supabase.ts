@@ -1,7 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 import { readSupabaseConfig } from './config';
+import { DEFAULT_SUPABASE } from './defaults';
 
-const { url: SUPABASE_URL, anonKey: SUPABASE_ANON_KEY } = readSupabaseConfig(import.meta.env);
+const { url: SUPABASE_URL, anonKey: SUPABASE_ANON_KEY } = readSupabaseConfig(import.meta.env, DEFAULT_SUPABASE);
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
