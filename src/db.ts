@@ -1,6 +1,9 @@
 import { Category, Item, ColorRule, UserProfile } from './types';
 import { DEFAULT_COLOR_RULES } from './colorData';
 import { supabase, uploadImage } from './lib/supabase';
+import { safeHttpUrl } from './lib/url';
+
+const GARMENT_TYPES = ['top', 'bottom', 'layer', 'accessory', 'other'];
 
 // ── helpers ───────────────────────────────────────────────────────────────
 
@@ -235,8 +238,13 @@ export function validateBackup(raw: unknown): { categories: any[]; items: any[];
   d.items.forEach((it: any, i: number) => {
     if (typeof it?.id !== 'string' || typeof it?.title !== 'string') throw new Error(`item ${i} is missing id or title`);
   });
+  const items = d.items.map((it: any) => ({
+    ...it,
+    garmentType: GARMENT_TYPES.includes(it.garmentType) ? it.garmentType : 'other',
+    link: typeof it.link === 'string' ? (safeHttpUrl(it.link) ?? '') : '',
+  }));
   const colorRules = Array.isArray(d.colorRules) && d.colorRules.length ? d.colorRules : [...DEFAULT_COLOR_RULES];
-  return { categories: d.categories, items: d.items, colorRules };
+  return { categories: d.categories, items, colorRules };
 }
 
 async function pruneMissing(table: string, uid: string, keepIds: string[]): Promise<void> {

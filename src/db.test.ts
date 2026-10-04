@@ -194,3 +194,22 @@ describe('saveUserProfileRemote', () => {
     ).rejects.toThrow('save profile');
   });
 });
+
+describe('validateBackup sanitising', () => {
+  it('coerces an unknown garmentType to other', () => {
+    const r = validateBackup({ categories: [], items: [{ id: 'a', title: 't', garmentType: 'hat' }] });
+    expect(r.items[0].garmentType).toBe('other');
+  });
+  it('keeps a valid garmentType', () => {
+    const r = validateBackup({ categories: [], items: [{ id: 'a', title: 't', garmentType: 'top' }] });
+    expect(r.items[0].garmentType).toBe('top');
+  });
+  it('drops a javascript: link', () => {
+    const r = validateBackup({ categories: [], items: [{ id: 'a', title: 't', link: 'javascript:alert(1)' }] });
+    expect(r.items[0].link).toBe('');
+  });
+  it('keeps an https link', () => {
+    const r = validateBackup({ categories: [], items: [{ id: 'a', title: 't', link: 'https://x.com/p' }] });
+    expect(r.items[0].link).toBe('https://x.com/p');
+  });
+});

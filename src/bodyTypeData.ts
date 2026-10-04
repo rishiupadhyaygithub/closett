@@ -457,3 +457,11 @@ export const MALE_BODY_TYPES = BODY_TYPE_ADVICE
 export const FEMALE_BODY_TYPES = BODY_TYPE_ADVICE
   .filter(a => a.gender === 'female')
   .map(a => ({ id: a.bodyType, label: a.label, description: a.description }));
+
+/** Build options for the onboarding quiz. 'other' merges both lists, keeping one entry per id (rectangle exists for both). */
+export function bodyTypesForGender(gender: Gender) {
+  if (gender === 'male') return MALE_BODY_TYPES;
+  if (gender === 'female') return FEMALE_BODY_TYPES;
+  const seen = new Set<string>();
+  return [...MALE_BODY_TYPES, ...FEMALE_BODY_TYPES].filter(b => (seen.has(b.id) ? false : (seen.add(b.id), true)));
+}
