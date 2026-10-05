@@ -77,7 +77,7 @@ describe('parsePrefill', () => {
 
   it('reads and cleans all fields', () => {
     const q = '?add=1&t=Linen%20shirt&i=https%3A%2F%2Fcdn.x.com%2Fa.jpg&p=%E2%82%B91%2C299.00&l=https%3A%2F%2Fx.com%2Fp';
-    expect(parsePrefill(q)).toEqual({ title: 'Linen shirt', image: 'https://cdn.x.com/a.jpg', price: '1299.00', currency: '', link: 'https://x.com/p' });
+    expect(parsePrefill(q)).toEqual({ title: 'Linen shirt', images: ['https://cdn.x.com/a.jpg'], price: '1299', currency: '', link: 'https://x.com/p', colorName: '' });
   });
 
   it('accepts a 3-letter currency and upper-cases it', () => {
@@ -91,7 +91,7 @@ describe('parsePrefill', () => {
 
   it('drops a javascript: link and a data: image', () => {
     const r = parsePrefill('?add=1&t=x&i=data%3Aimage%2Fpng%3Bbase64%2CAAAA&l=javascript%3Aalert(1)');
-    expect(r!.image).toBe('');
+    expect(r!.images).toEqual([]);
     expect(r!.link).toBe('');
   });
 

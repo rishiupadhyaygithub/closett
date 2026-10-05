@@ -48,7 +48,7 @@ Closett is a personal wardrobe manager with colour recommendations calibrated fo
 - **My Style page** — colour season card, recommended + avoid palette grouped by family, body type advice, Indian ethnic wear section
 - **Closet Matcher** — pick a top colour → see matching layers, bottoms, accessories; undertone chip indicators on all colour swatches
 - **Color Rules** — accordion UI to configure which bottom colours pair with each top (35 × 35 combinations)
-- **Add piece** — "Add to Closett" bookmarklet (drag it to your bookmarks bar, click it on any product page; works on bot-protected shops like Zara because it runs in your own browser); image upload via drag/drop, click, or Ctrl+V paste; large photos are shrunk to 1200px; colour is suggested from the photo and garment type from the title; prices keep their own currency
+- **Add piece** — "Add to Closett" bookmarklet (drag it to your bookmarks bar, click it on any product page; works on bot-protected shops like Zara because it runs in your own browser; reads the shop's structured product data first, so title, price, currency, colour and photo come through cleanly, and keeps its own copy of the photo when the shop allows it); image upload via drag/drop, click, or Ctrl+V paste; large photos are shrunk to 1200px; colour is suggested from the photo and garment type from the title; prices keep their own currency
 - **Collections** — nested category tree with subcollections; items move to Uncategorized on delete
 - **Export / Import** — full JSON backup and restore
 

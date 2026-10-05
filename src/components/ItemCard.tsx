@@ -19,6 +19,7 @@ export default function ItemCard({ item, categoryName, onEdit, onDelete }: ItemC
           src={item.image}
           alt={item.title}
           loading="lazy"
+          referrerPolicy="no-referrer"
           decoding="async"
           onError={e => { (e.target as HTMLImageElement).src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200"%3E%3Crect width="200" height="200" fill="%23f0ece6"/%3E%3Ctext x="100" y="108" text-anchor="middle" font-size="40" fill="%23b8a898"%3E✦%3C/text%3E%3C/svg%3E'; }}
         />

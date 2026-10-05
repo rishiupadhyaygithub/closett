@@ -3,6 +3,8 @@ import { Item, Category, ColorRule, UserProfile } from '../types';
 import { COLOR_PALETTE, getColorName, isColorRecommended } from '../colorData';
 import { getBodyTypeAdvice } from '../bodyTypeData';
 import { suggestColorFromImage } from '../lib/imagePixels';
+import { firstLoadableImage, fetchImageAsDataUrl } from '../lib/imageProbe';
+import { colorFromName } from '../lib/colorNames';
 import { guessCategory, guessGarmentType } from '../lib/guess';
 import { bookmarkletHref, type Prefill } from '../lib/bookmarklet';
 import { safeHttpUrl } from '../lib/url';
@@ -43,6 +45,7 @@ export default function AddItemModal({
   const [garmentType, setGarmentType] = useState<'top' | 'bottom' | 'layer' | 'accessory' | 'other'>('other');
   const [color, setColor] = useState('');
   const [colorSuggested, setColorSuggested] = useState(false);
+  const [colorFromPage, setColorFromPage] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [imageError, setImageError] = useState('');
   const [discardHint, setDiscardHint] = useState(false);
@@ -68,6 +71,7 @@ export default function AddItemModal({
       setCategoryId(editingItem.categoryId);
       setColor(editingItem.color || '');
       setColorSuggested(false);
+      setColorFromPage(false);
       setGarmentType(editingItem.garmentType || 'other');
     } else {
       resetForm();
@@ -82,7 +86,7 @@ export default function AddItemModal({
 
   // Suggest a colour from the photo, but never overwrite a colour the user picked
   useEffect(() => {
-    if (!image || (color && !colorSuggested)) return;
+    if (!image || colorFromPage || (color && !colorSuggested)) return;
     let cancelled = false;
     suggestColorFromImage(image).then(id => {
       if (cancelled || !id) return;
@@ -176,6 +180,7 @@ export default function AddItemModal({
     setNotes('');
     setColor('');
     setColorSuggested(false);
+    setColorFromPage(false);
     setImageError('');
     setDiscardHint(false);
     setGarmentType('other');
@@ -193,7 +198,19 @@ export default function AddItemModal({
     if (data.price) setPrice(data.price);
     if (data.currency) setCurrency(data.currency);
     if (data.link) setLink(data.link);
-    if (data.image) setImage(data.image);
+    if (data.images.length) {
+      // Try each photo the page offered; shops differ in which ones can be loaded from another site
+      void firstLoadableImage(data.images).then(async url => {
+        if (url) {
+          // Keep our own copy when the shop allows it (links rot); otherwise keep the plain link
+          const local = await fetchImageAsDataUrl(url);
+          const copy = local ? await downscaleDataUrl(local) : null;
+          setImage(prev => prev || copy || url);
+        } else setImageError('Could not load the photo from that shop. Save the product photo and upload it here, or paste a screenshot.');
+      });
+    }
+    const named = colorFromName(data.colorName);
+    if (named) { setColor(named); setColorSuggested(false); setColorFromPage(true); }
     const guessedType = guessGarmentType(data.title, '', data.link);
     if (guessedType !== 'other') setGarmentType(guessedType);
     const guessed = guessCategory(data.title, '', data.link);
@@ -274,7 +291,7 @@ export default function AddItemModal({
             />
             {image ? (
               <div className="drop-zone__preview">
-                <img src={image} alt="Preview" />
+                <img src={image} alt="Preview" referrerPolicy="no-referrer" />
                 <button
                   onClick={e => { e.stopPropagation(); setImage(''); }}
                   className="drop-zone__remove"
@@ -371,6 +388,9 @@ export default function AddItemModal({
           <div className="field-group">
             <div className="color-label-row">
               <label className="field-label" style={{ margin: 0 }}>Dominant Color</label>
+              {colorFromPage && color && (
+                <span className="tone-badge" data-testid="color-from-page">✦ Colour taken from the product page. Change it if it's wrong.</span>
+              )}
               {colorSuggested && color && (
                 <span className="tone-badge" data-testid="color-suggested">✦ Suggested from photo. Change it if it's wrong.</span>
               )}
@@ -394,7 +414,7 @@ export default function AddItemModal({
                 <div className="color-chips">
                   <button
                     type="button"
-                    onClick={() => { setColor(''); setColorSuggested(false); }}
+                    onClick={() => { setColor(''); setColorSuggested(false); setColorFromPage(false); }}
                     className={`color-chip color-chip--none ${!color ? 'color-chip--active' : ''}`}
                     title="No colour"
                     aria-label="No colour"
@@ -425,7 +445,7 @@ export default function AddItemModal({
                               type="button"
                               aria-label={`${c.name}${rec === true ? ', recommended for your undertone' : rec === false ? ', may clash with your undertone' : ''}`}
                               aria-pressed={color === c.id}
-                              onClick={() => { setColor(c.id); setColorSuggested(false); }}
+                              onClick={() => { setColor(c.id); setColorSuggested(false); setColorFromPage(false); }}
                               className={`color-chip ${color === c.id ? 'color-chip--active' : ''} ${rec === false ? 'color-chip--avoid' : ''}`}
                               style={{ backgroundColor: c.hex }}
                             />
