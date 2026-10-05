@@ -4,7 +4,7 @@ import { COLOR_PALETTE, getColorName, isColorRecommended } from '../colorData';
 import { getBodyTypeAdvice } from '../bodyTypeData';
 import { suggestColorFromImage } from '../lib/imagePixels';
 import { guessCategory, guessGarmentType } from '../lib/guess';
-import { cleanPrice } from '../lib/price';
+import { bookmarkletHref, type Prefill } from '../lib/bookmarklet';
 import { safeHttpUrl } from '../lib/url';
 import { downscaleDataUrl } from '../lib/downscale';
 
@@ -17,138 +17,9 @@ interface AddItemModalProps {
   editingItem: Item | null;
   colorRules: ColorRule[];
   userProfile: UserProfile | null;
-}
-
-interface ScrapedData {
-  title?: string;
-  image?: string;
-  price?: string;
-  currency?: string;
-  description?: string;
-}
-
-async function tryProxy(url: string): Promise<string> {
-  // Proxy 1: allorigins (returns JSON wrapper)
-  try {
-    const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`, {
-      signal: AbortSignal.timeout(8000),
-    });
-    if (res.ok) {
-      const json = await res.json();
-      if (json.contents && json.contents.length > 200) return json.contents;
-    }
-  } catch { /* try next */ }
-
-  // Proxy 2: corsproxy.io (returns HTML directly)
-  try {
-    const res = await fetch(`https://corsproxy.io/?${encodeURIComponent(url)}`, {
-      signal: AbortSignal.timeout(8000),
-    });
-    if (res.ok) {
-      const html = await res.text();
-      if (html.length > 200) return html;
-    }
-  } catch { /* try next */ }
-
-  // Proxy 3: codetabs
-  try {
-    const res = await fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`, {
-      signal: AbortSignal.timeout(8000),
-    });
-    if (res.ok) {
-      const html = await res.text();
-      if (html.length > 200) return html;
-    }
-  } catch { /* all failed */ }
-
-  throw new Error('All proxies failed');
-}
-
-async function fetchProductMetadata(url: string): Promise<ScrapedData> {
-  const html = await tryProxy(url);
-  
-  // Parse with DOMParser
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(html, 'text/html');
-  
-  const getMeta = (selectors: string[]): string => {
-    for (const sel of selectors) {
-      const el = doc.querySelector(sel);
-      const val = el?.getAttribute('content') || el?.getAttribute('value') || el?.textContent || '';
-      if (val.trim()) return val.trim();
-    }
-    return '';
-  };
-  
-  // Title
-  const title = getMeta([
-    'meta[property="og:title"]',
-    'meta[name="twitter:title"]',
-    'meta[name="title"]',
-    'meta[property="product:title"]',
-  ]) || doc.querySelector('h1')?.textContent?.trim() || doc.title?.trim() || '';
-  
-  // Image
-  const image = getMeta([
-    'meta[property="og:image"]',
-    'meta[name="twitter:image"]',
-    'meta[name="twitter:image:src"]',
-    'meta[property="og:image:secure_url"]',
-    'meta[itemprop="image"]',
-  ]);
-  
-  // Description
-  const description = getMeta([
-    'meta[property="og:description"]',
-    'meta[name="description"]',
-    'meta[name="twitter:description"]',
-  ]);
-  
-  // Price — try various OG/meta/schema patterns
-  let price = getMeta([
-    'meta[property="product:price:amount"]',
-    'meta[property="og:price:amount"]',
-    'meta[name="price"]',
-    'meta[itemprop="price"]',
-  ]);
-  
-  // Try JSON-LD for price
-  if (!price) {
-    const scripts = Array.from(doc.querySelectorAll('script[type="application/ld+json"]'));
-    for (const s of scripts) {
-      try {
-        const ld = JSON.parse(s.textContent || '');
-        const candidates = Array.isArray(ld) ? ld : [ld];
-        for (const c of candidates) {
-          const p = c?.offers?.price || c?.price || c?.offers?.[0]?.price;
-          if (p) { price = String(p); break; }
-        }
-        if (price) break;
-      } catch { /* ignore */ }
-    }
-  }
-  
-  // Currency from meta
-  let currency = getMeta([
-    'meta[property="product:price:currency"]',
-    'meta[property="og:price:currency"]',
-    'meta[name="currency"]',
-    'meta[itemprop="priceCurrency"]',
-  ]) || 'INR';
-  
-  // Normalize currency to 3-letter code
-  const currencyMap: Record<string, string> = {
-    '$': 'USD', '₹': 'INR', '€': 'EUR', '£': 'GBP', '¥': 'JPY', 'د.إ': 'AED',
-    'usd': 'USD', 'inr': 'INR', 'eur': 'EUR', 'gbp': 'GBP', 'jpy': 'JPY', 'aed': 'AED',
-  };
-  currency = currencyMap[currency.toLowerCase()] || currency.toUpperCase() || 'USD';
-  
-  // Clean price — remove currency symbols, commas, etc.
-  if (price) {
-    price = cleanPrice(price);
-  }
-
-  return { title, image, price, currency, description };
+  /** Product data handed over by the bookmarklet; fills the form when the modal opens. */
+  prefill?: Prefill | null;
+  onPrefillUsed?: () => void;
 }
 
 export default function AddItemModal({
@@ -159,6 +30,8 @@ export default function AddItemModal({
   editingItem,
   colorRules,
   userProfile,
+  prefill,
+  onPrefillUsed,
 }: AddItemModalProps) {
   const [image, setImage] = useState<string>('');
   const [title, setTitle] = useState('');
@@ -175,11 +48,8 @@ export default function AddItemModal({
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // URL fetch state
-  const [urlInput, setUrlInput] = useState('');
-  const [isFetching, setIsFetching] = useState(false);
-  const [fetchError, setFetchError] = useState('');
-  const [fetchSuccess, setFetchSuccess] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const bookmarkletRef = useRef<HTMLAnchorElement>(null);
 
   useEffect(() => {
     if (editingItem) {
@@ -193,11 +63,16 @@ export default function AddItemModal({
       setColor(editingItem.color || '');
       setColorSuggested(false);
       setGarmentType(editingItem.garmentType || 'other');
-      setUrlInput(editingItem.link || '');
     } else {
       resetForm();
+      if (isOpen && prefill) applyPrefill(prefill);
     }
-  }, [editingItem, categories, isOpen]);
+  }, [editingItem, categories, isOpen, prefill]);
+
+  // React refuses javascript: hrefs, so the bookmarklet link is set on the element directly
+  useEffect(() => {
+    bookmarkletRef.current?.setAttribute('href', bookmarkletHref(window.location.origin));
+  }, [isOpen]);
 
   // Suggest a colour from the photo, but never overwrite a colour the user picked
   useEffect(() => {
@@ -272,7 +147,7 @@ export default function AddItemModal({
     setIsSaving(true);
     try {
       const ok = await onSave(item);
-      if (ok !== false) resetForm();
+      if (ok !== false) { resetForm(); onPrefillUsed?.(); }
     } finally {
       savingRef.current = false;
       setIsSaving(false);
@@ -290,72 +165,34 @@ export default function AddItemModal({
     setColorSuggested(false);
     setGarmentType('other');
     setCategoryId(categories.find(c => c.id === 'uncategorized')?.id || categories[0]?.id || '');
-    setUrlInput('');
-    setFetchError('');
-    setFetchSuccess(false);
   };
 
   const handleClose = () => {
     resetForm();
+    onPrefillUsed?.();
     onClose();
   };
 
-  // ── URL Auto-fill ──
-  const handleFetchFromUrl = async () => {
-    const rawUrl = urlInput.trim();
-    if (!rawUrl) return;
-
-    // Ensure it has a protocol
-    const url = rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`;
-
-    setIsFetching(true);
-    setFetchError('');
-    setFetchSuccess(false);
-
-    try {
-      const data = await fetchProductMetadata(url);
-
-      // Fill fields only if we got something
-      if (data.title) setTitle(data.title);
-      if (data.price) setPrice(data.price);
-      setCurrency('INR');
-      
-      // Always set link
-      setLink(url);
-
-      // Set image if we got one (could be relative URL)
-      if (data.image) {
-        try {
-          const imgUrl = new URL(data.image, url).href;
-          // Set image as URL string directly (not base64)
-          setImage(imgUrl);
-        } catch {
-          if (data.image.startsWith('http')) setImage(data.image);
-        }
-      }
-
-      // Smart category guess
-      if (!editingItem && data.title) {
-        const guessedType = guessGarmentType(data.title, data.description || '', url);
-        if (guessedType !== 'other' && garmentType === 'other') setGarmentType(guessedType);
-        const guessed = guessCategory(data.title, data.description || '', url);
-        if (guessed) {
-          // Find existing category by name (case-insensitive)
-          const match = categories.find(c =>
-            c.name.toLowerCase().includes(guessed) || guessed.includes(c.name.toLowerCase())
-          );
-          if (match) setCategoryId(match.id);
-        }
-      }
-
-      setFetchSuccess(true);
-      setTimeout(() => setFetchSuccess(false), 3000);
-    } catch (err) {
-      console.error(err);
-      setFetchError('Could not fetch product details. You can fill in manually, or try copying the link again.');
-    } finally {
-      setIsFetching(false);
+  const applyPrefill = (data: Prefill) => {
+    if (data.title) setTitle(data.title);
+    if (data.price) setPrice(data.price);
+    if (data.link) setLink(data.link);
+    if (data.image) setImage(data.image);
+    const guessedType = guessGarmentType(data.title, '', data.link);
+    if (guessedType !== 'other') setGarmentType(guessedType);
+    const guessed = guessCategory(data.title, '', data.link);
+    if (guessed) {
+      const match = categories.find(c => c.name.toLowerCase().includes(guessed) || guessed.includes(c.name.toLowerCase()));
+      if (match) setCategoryId(match.id);
     }
+  };
+
+  const copyBookmarklet = async () => {
+    try {
+      await navigator.clipboard.writeText(bookmarkletHref(window.location.origin));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch { /* clipboard blocked: the drag-to-bookmarks-bar route still works */ }
   };
 
   if (!isOpen) return null;
@@ -372,43 +209,18 @@ export default function AddItemModal({
         {/* Body */}
         <div className="modal-body">
 
-          {/* ── URL Auto-fill Section ── */}
+          {/* ── Add from any shop (bookmarklet) ── */}
           <div className="url-fetch-section">
-            <label className="field-label">
-              🔗 Paste product link to auto-fill
-            </label>
-            <div className="url-fetch-row">
-              <input
-                type="url"
-                value={urlInput}
-                onChange={e => { setUrlInput(e.target.value); setFetchError(''); setFetchSuccess(false); }}
-                onKeyDown={e => e.key === 'Enter' && handleFetchFromUrl()}
-                placeholder="https://www.zara.com/... or myntra.com/..."
-                className="field-input url-fetch-input"
-              />
-              <button
-                onClick={handleFetchFromUrl}
-                disabled={!urlInput.trim() || isFetching}
-                className={`btn-fetch ${isFetching ? 'btn-fetch--loading' : ''}`}
-              >
-                {isFetching ? (
-                  <span className="fetch-spinner">↻</span>
-                ) : '✦ Fetch'}
-              </button>
-            </div>
-            {isFetching && (
-              <p className="fetch-status fetch-status--loading">
-                Fetching product details…
-              </p>
-            )}
-            {fetchSuccess && (
-              <p className="fetch-status fetch-status--success">
-                ✓ Details filled in! Review and save.
-              </p>
-            )}
-            {fetchError && (
-              <p className="fetch-status fetch-status--error">{fetchError}</p>
-            )}
+            <label className="field-label">🔗 Add from any shop</label>
+            <p className="bookmarklet-help">
+              1. Drag <a
+                ref={bookmarkletRef}
+                className="bookmarklet-link"
+                onClick={e => { e.preventDefault(); alert('Drag this button to your bookmarks bar. Do not click it here.'); }}
+              >✦ Add to Closett</a> to your bookmarks bar.<br />
+              2. Open a product page (Zara, Myntra, anything) and click that bookmark.<br />
+              The details land here, ready to review. On a phone, <button type="button" className="bookmarklet-copy" onClick={copyBookmarklet}>{copied ? 'Copied ✓' : 'copy the bookmark'}</button> and paste it as a bookmark's address.
+            </p>
           </div>
 
           <div className="divider-or">
