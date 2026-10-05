@@ -12,12 +12,12 @@ function load(src: string): Promise<HTMLImageElement | null> {
 
 /**
  * Shrinks a large photo (phone cameras are 4000px+) to at most 1200px on the long
- * side as JPEG, so uploads are small and fast. Small images and anything that
- * fails to decode are returned unchanged.
+ * side as JPEG, so uploads are small and fast. Small images are returned unchanged.
+ * Returns null when the browser cannot decode the file (corrupt, or HEIC outside Safari).
  */
-export async function downscaleDataUrl(dataUrl: string): Promise<string> {
+export async function downscaleDataUrl(dataUrl: string): Promise<string | null> {
   const img = await load(dataUrl);
-  if (!img) return dataUrl;
+  if (!img) return null;
   const longest = Math.max(img.naturalWidth, img.naturalHeight);
   if (longest <= MAX_SIDE) return dataUrl;
 

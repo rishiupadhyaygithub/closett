@@ -1,9 +1,14 @@
 import { useState } from 'react';
 import { Gender, SkinTone, Undertone, BodyType, UserProfile } from '../types';
 import { bodyTypesForGender } from '../bodyTypeData';
+import { useModal } from '../lib/useModal';
 
 interface OnboardingModalProps {
   onComplete: (profile: UserProfile) => void;
+  /** Current profile when editing: the quiz starts with these answers selected. */
+  initial?: UserProfile;
+  /** Present only when editing an existing profile. The first-run quiz cannot be dismissed. */
+  onCancel?: () => void;
 }
 
 const SKIN_TONES: { id: SkinTone; label: string; desc: string; hex: string }[] = [
@@ -44,12 +49,13 @@ const UNDERTONES: { id: Undertone; label: string; desc: string; detail: string; 
   },
 ];
 
-export default function OnboardingModal({ onComplete }: OnboardingModalProps) {
+export default function OnboardingModal({ onComplete, initial, onCancel }: OnboardingModalProps) {
   const [step, setStep] = useState(1);
-  const [gender, setGender] = useState<Gender | null>(null);
-  const [skinTone, setSkinTone] = useState<SkinTone | null>(null);
-  const [undertone, setUndertone] = useState<Undertone | null>(null);
-  const [bodyType, setBodyType] = useState<BodyType | null>(null);
+  const [gender, setGender] = useState<Gender | null>(initial?.gender ?? null);
+  const [skinTone, setSkinTone] = useState<SkinTone | null>(initial?.skinTone ?? null);
+  const [undertone, setUndertone] = useState<Undertone | null>(initial?.undertone ?? null);
+  const [bodyType, setBodyType] = useState<BodyType | null>(initial?.bodyType ?? null);
+  const modalRef = useModal(true, onCancel ?? (() => {}));
 
   const bodyTypes = bodyTypesForGender(gender ?? 'other');
 
@@ -67,11 +73,12 @@ export default function OnboardingModal({ onComplete }: OnboardingModalProps) {
   };
 
   return (
-    <div className="modal-overlay">
-      <div className="modal-box onboarding-box">
+    <div className="modal-overlay" onClick={onCancel}>
+      <div ref={modalRef} className="modal-box onboarding-box" role="dialog" aria-modal="true" aria-label="Your style profile" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="onboarding-header">
           <span className="onboarding-brand">✦ Closett</span>
+          {onCancel && <button className="modal-close" onClick={onCancel} aria-label="Cancel editing">✕</button>}
           <div className="onboarding-steps">
             {[1, 2, 3, 4].map(s => (
               <div

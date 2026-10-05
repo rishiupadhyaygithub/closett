@@ -213,3 +213,10 @@ describe('validateBackup sanitising', () => {
     expect(r.items[0].link).toBe('https://x.com/p');
   });
 });
+
+describe('signed-out session', () => {
+  it('explains what happened instead of "Not authenticated"', async () => {
+    h.getSession.mockResolvedValue({ data: { session: null } });
+    await expect(addItem(ITEM)).rejects.toThrow(/session ended.*reload/i);
+  });
+});

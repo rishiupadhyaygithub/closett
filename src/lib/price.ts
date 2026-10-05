@@ -18,8 +18,20 @@ export function cleanPrice(raw: string): string {
     s = lastGroup.length === 3
       ? s.replace(/,/g, '')                                        // 1,299 / 1,29,999 → thousands
       : s.slice(0, last).replace(/,/g, '') + '.' + lastGroup;      // 12,50 → decimal comma
-  } else if (hasDot && /^\d{1,3}(\.\d{3})+$/.test(s)) {
+  } else if (hasDot && /^[1-9]\d{0,2}(\.\d{3})+$/.test(s)) { // a thousands group never starts with 0 (0.001 is a decimal)
     s = s.replace(/\./g, '');
   }
   return s;
+}
+
+const MAX_PRICE = 1_000_000_000;
+
+/** Number for a price typed or pasted into the form. Anything unusable (text, negative, absurd) is 0. */
+export function parsePriceInput(raw: string): number {
+  const text = raw.trim();
+  if (text.startsWith('-')) return 0;
+  const n = parseFloat(cleanPrice(text));
+  if (!Number.isFinite(n) || n < 0) return 0;
+  const rounded = Math.round(n * 100) / 100;
+  return rounded > MAX_PRICE ? 0 : rounded;
 }

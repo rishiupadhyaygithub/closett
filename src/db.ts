@@ -10,7 +10,7 @@ const GARMENT_TYPES = ['top', 'bottom', 'layer', 'accessory', 'other'];
 async function currentUserId(): Promise<string> {
   const { data } = await supabase.auth.getSession();
   const uid = data.session?.user?.id;
-  if (!uid) throw new Error('Not authenticated');
+  if (!uid) throw new Error('Your session ended, so this closet can no longer be reached. Reload the page to start a new one.');
   return uid;
 }
 

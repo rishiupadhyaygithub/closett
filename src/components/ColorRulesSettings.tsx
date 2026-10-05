@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ColorRule } from '../types';
 import { COLOR_PALETTE, getColorName, getColorHex } from '../colorData';
+import { useModal } from '../lib/useModal';
 
 interface ColorRulesSettingsProps {
   isOpen: boolean;
@@ -40,14 +41,16 @@ export default function ColorRulesSettings({ isOpen, onClose, rules, onSave }: C
 
   const handleSave = () => { onSave(localRules); onClose(); };
 
+  const modalRef = useModal(isOpen, onClose);
+
   if (!isOpen) return null;
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box modal-box--large crs-modal" onClick={e => e.stopPropagation()}>
+      <div ref={modalRef} className="modal-box modal-box--large crs-modal" role="dialog" aria-modal="true" aria-labelledby="crs-title" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <h2 className="modal-title">Color Combination Rules</h2>
-          <button onClick={onClose} className="modal-close">✕</button>
+          <h2 id="crs-title" className="modal-title">Color Combination Rules</h2>
+          <button onClick={onClose} className="modal-close" aria-label="Close">✕</button>
         </div>
 
         <p className="crs-description">

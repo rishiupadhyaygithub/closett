@@ -32,3 +32,18 @@ describe('ensureSession', () => {
     expect((await ensureSession(c)).error).toContain('offline');
   });
 });
+
+describe('ensureSession concurrency', () => {
+  it('two simultaneous calls sign in only once (React StrictMode runs effects twice)', async () => {
+    const c = auth({});
+    const [a, b] = await Promise.all([ensureSession(c), ensureSession(c)]);
+    expect(c.auth.signInAnonymously).toHaveBeenCalledTimes(1);
+    expect(a).toEqual(b);
+  });
+  it('a later call after the first finished checks the session again', async () => {
+    const c = auth({});
+    await ensureSession(c);
+    await ensureSession(c);
+    expect(c.auth.getSession).toHaveBeenCalledTimes(2);
+  });
+});
