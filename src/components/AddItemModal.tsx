@@ -36,7 +36,7 @@ export default function AddItemModal({
   const [image, setImage] = useState<string>('');
   const [title, setTitle] = useState('');
   const [price, setPrice] = useState('');
-  const [_currency, setCurrency] = useState('INR');
+  const [currency, setCurrency] = useState('INR');
   const [garmentType, setGarmentType] = useState<'top' | 'bottom' | 'layer' | 'accessory' | 'other'>('other');
   const [color, setColor] = useState('');
   const [colorSuggested, setColorSuggested] = useState(false);
@@ -56,7 +56,7 @@ export default function AddItemModal({
       setImage(editingItem.image);
       setTitle(editingItem.title);
       setPrice(editingItem.price ? editingItem.price.toString() : '');
-      setCurrency('INR');
+      setCurrency(editingItem.currency || 'INR');
       setLink(editingItem.link);
       setNotes(editingItem.notes);
       setCategoryId(editingItem.categoryId);
@@ -135,7 +135,7 @@ export default function AddItemModal({
       image,
       title: title.trim(),
       price: parseFloat(price) || 0,
-      currency: 'INR',
+      currency: currency || 'INR',
       link: safeHttpUrl(link) ?? '',
       notes: notes.trim(),
       categoryId: categoryId || 'uncategorized',
@@ -176,6 +176,7 @@ export default function AddItemModal({
   const applyPrefill = (data: Prefill) => {
     if (data.title) setTitle(data.title);
     if (data.price) setPrice(data.price);
+    if (data.currency) setCurrency(data.currency);
     if (data.link) setLink(data.link);
     if (data.image) setImage(data.image);
     const guessedType = guessGarmentType(data.title, '', data.link);
@@ -278,7 +279,7 @@ export default function AddItemModal({
           {/* Price + Garment Type */}
           <div className="field-grid">
             <div className="field-group">
-              <label className="field-label">Price (₹ INR)</label>
+              <label className="field-label">Price ({currency})</label>
               <input
                 type="number"
                 value={price}

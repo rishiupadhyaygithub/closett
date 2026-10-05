@@ -31,6 +31,7 @@ describe('bookmarklet code', () => {
     expect(u.searchParams.get('t')).toBe('RELAXED FIT PLEATED JACKET');
     expect(u.searchParams.get('i')).toBe('https://www.zara.com/photos/jacket.jpg');
     expect(u.searchParams.get('p')).toBe('2,299.00');
+    expect(u.searchParams.get('c')).toBe('AED');
     expect(u.searchParams.get('l')).toBe('https://www.zara.com/ae/en/jacket-p1.html?v1=5');
   });
 
@@ -47,6 +48,11 @@ describe('bookmarklet code', () => {
   it('still opens Closett when the page has no product data', () => {
     const opened = runOnPage('<head></head><body></body>', 'https://shop.example/p');
     expect(new URL(opened!).searchParams.get('l')).toBe('https://shop.example/p');
+  });
+
+  it('reads the currency from a meta tag', () => {
+    const html = `<head><meta property="og:title" content="X"><meta property="product:price:amount" content="49"><meta property="product:price:currency" content="USD"></head>`;
+    expect(new URL(runOnPage(html, 'https://shop.example/p')!).searchParams.get('c')).toBe('USD');
   });
 
   it('survives broken JSON-LD', () => {
@@ -71,7 +77,16 @@ describe('parsePrefill', () => {
 
   it('reads and cleans all fields', () => {
     const q = '?add=1&t=Linen%20shirt&i=https%3A%2F%2Fcdn.x.com%2Fa.jpg&p=%E2%82%B91%2C299.00&l=https%3A%2F%2Fx.com%2Fp';
-    expect(parsePrefill(q)).toEqual({ title: 'Linen shirt', image: 'https://cdn.x.com/a.jpg', price: '1299.00', link: 'https://x.com/p' });
+    expect(parsePrefill(q)).toEqual({ title: 'Linen shirt', image: 'https://cdn.x.com/a.jpg', price: '1299.00', currency: '', link: 'https://x.com/p' });
+  });
+
+  it('accepts a 3-letter currency and upper-cases it', () => {
+    expect(parsePrefill('?add=1&c=aed')!.currency).toBe('AED');
+  });
+
+  it('rejects a malformed currency', () => {
+    expect(parsePrefill('?add=1&c=%3Cscript%3E')!.currency).toBe('');
+    expect(parsePrefill('?add=1&c=EURO')!.currency).toBe('');
   });
 
   it('drops a javascript: link and a data: image', () => {

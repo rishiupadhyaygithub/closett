@@ -1,6 +1,7 @@
 import { Item } from '../types';
 import { getColorHex, getColorName } from '../colorData';
 import { safeHttpUrl } from '../lib/url';
+import { formatPrice } from '../lib/money';
 
 interface ItemCardProps {
   item: Item;
@@ -11,16 +12,6 @@ interface ItemCardProps {
 
 export default function ItemCard({ item, categoryName, onEdit, onDelete }: ItemCardProps) {
   const link = safeHttpUrl(item.link);
-  const formatPrice = (price: number) => {
-    if (!price) return 'No price';
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 2,
-    }).format(price);
-  };
-
   return (
     <div className="item-card">
       <div className="item-card__image-wrap">
@@ -66,7 +57,7 @@ export default function ItemCard({ item, categoryName, onEdit, onDelete }: ItemC
 
       <div className="item-card__body">
         <h3 className="item-card__title" title={item.title}>{item.title}</h3>
-        <p className="item-card__price">{formatPrice(item.price)}</p>
+        <p className="item-card__price">{formatPrice(item.price, item.currency)}</p>
         {(item.color || (item.garmentType && item.garmentType !== 'other')) && (
           <div className="item-card__meta">
             {item.color && (
