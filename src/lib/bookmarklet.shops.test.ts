@@ -121,3 +121,15 @@ describe('bookmarklet on a ProductGroup with variants (H&M)', () => {
   it('reads the image from the variant', () => expect(q().searchParams.get('i')).toBe('https://image.hm.com/assets/a.jpg'));
   it('does not repeat the same image', () => expect(q().searchParams.has('i2')).toBe(false));
 });
+
+describe('bookmarklet portability', () => {
+  it('is plain ASCII, so pasting it as a bookmark address cannot mangle it', () => {
+    expect(bookmarkletCode(APP)).toMatch(/^[\x20-\x7e]*$/);
+  });
+  it('still recognises the rupee, euro and pound signs', () => {
+    const run = (sym: string) => runOnPage(`<head></head><body><span class="price">${sym}499</span></body>`, 'https://shop.example/p').searchParams.get('c');
+    expect(run('₹')).toBe('INR');
+    expect(run('€')).toBe('EUR');
+    expect(run('£')).toBe('GBP');
+  });
+});

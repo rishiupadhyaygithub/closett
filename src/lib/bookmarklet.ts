@@ -40,9 +40,9 @@ var price=O?String(O.price||O.lowPrice||""):"";
 var cur=O&&typeof O.priceCurrency==="string"?O.priceCurrency:"";
 if(!price)price=m(["meta[property=\"product:price:amount\"]","meta[property=\"og:price:amount\"]","meta[itemprop=\"price\"]","meta[name=\"price\"]"]);
 if(!cur)cur=m(["meta[property=\"product:price:currency\"]","meta[property=\"og:price:currency\"]","meta[itemprop=\"priceCurrency\"]"]);
-if(!price){var pe=d.querySelectorAll("[itemprop=\"price\"],[class*=\"price\"],[id*=\"price\"],[data-price]");var re=/(?:₹|Rs\.?|INR|AED|USD|\$|€|£)\s*(\d[\d,]*(?:\.\d+)?)/i;
+if(!price){var pe=d.querySelectorAll("[itemprop=\"price\"],[class*=\"price\"],[id*=\"price\"],[data-price]");var re=/(?:\u20b9|Rs\.?|INR|AED|USD|\$|\u20ac|\u00a3)\s*(\d[\d,]*(?:\.\d+)?)/i;
 for(var q=0;q<pe.length&&q<40&&!price;q++){var tx=pe[q].getAttribute("content")||pe[q].getAttribute("data-price")||pe[q].textContent||"";var mm=re.exec(tx);
-if(mm){price=mm[1];if(!cur){var sy=mm[0];cur=/₹|rs|inr/i.test(sy)?"INR":/aed/i.test(sy)?"AED":/usd|\$/i.test(sy)?"USD":/€/.test(sy)?"EUR":/£/.test(sy)?"GBP":""}}}}
+if(mm){price=mm[1];if(!cur){var sy=mm[0];cur=/\u20b9|rs|inr/i.test(sy)?"INR":/aed/i.test(sy)?"AED":/usd|\$/i.test(sy)?"USD":/\u20ac/.test(sy)?"EUR":/\u00a3/.test(sy)?"GBP":""}}}}
 var imgs=[];
 function add(u){if(u&&typeof u==="object")u=u.url||u["@id"]||"";u=t(u);if(!u)return;try{u=new URL(u,location.href).href}catch(e){return}if(u.length>1500||imgs.indexOf(u)>-1)return;imgs.push(u)}
 for(var w2=0;w2<V.length;w2++){var vi=V[w2]&&V[w2].image;if(!vi)continue;if(Array.isArray(vi)){for(var a=0;a<vi.length;a++)add(vi[a])}else add(vi)}
