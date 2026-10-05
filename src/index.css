@@ -2577,3 +2577,11 @@ body {
   .search-wrap { flex: 1 1 140px; min-width: 0; }
   .page-title { font-size: 22px; }
 }
+
+/* Bookmarklet helper in the Add Piece modal */
+.bookmarklet-help { font-size: 13px; line-height: 1.9; color: var(--text-secondary); margin: 6px 0 0; }
+.bookmarklet-link {
+  display: inline-block; padding: 4px 12px; border-radius: 999px; cursor: grab;
+  background: var(--accent); color: #1a1814; font-weight: 600; font-size: 13px; text-decoration: none;
+}
+.bookmarklet-copy { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); text-decoration: underline; cursor: pointer; }

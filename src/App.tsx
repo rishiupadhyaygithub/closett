@@ -19,6 +19,7 @@ import {
 import { supabase } from './lib/supabase';
 import { ensureSession } from './lib/session';
 import { runAction } from './lib/actions';
+import { parsePrefill, type Prefill } from './lib/bookmarklet';
 import type { User } from '@supabase/supabase-js';
 import ItemCard from './components/ItemCard';
 import AddItemModal from './components/AddItemModal';
@@ -32,6 +33,8 @@ function App() {
   const [authLoading, setAuthLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // Product data from the "Add to Closett" bookmarklet arrives in the URL query
+  const [prefill, setPrefill] = useState<Prefill | null>(() => parsePrefill(window.location.search));
   const [categories, setCategories] = useState<Category[]>([]);
   const [items, setItems] = useState<Item[]>([]);
   const [colorRules, setColorRules] = useState<ColorRule[]>([]);
@@ -59,6 +62,12 @@ function App() {
     setUserProfile(profile);
     setShowOnboarding(false);
   };
+
+  useEffect(() => {
+    if (!prefill) return;
+    setIsAddModalOpen(true);
+    window.history.replaceState(null, '', window.location.pathname); // keep the product link out of the address bar
+  }, []);
 
   // Auth listener — no login screen; auto sign-in anonymously
   useEffect(() => {
@@ -528,6 +537,8 @@ function App() {
         editingItem={editingItem}
         colorRules={colorRules}
         userProfile={userProfile}
+        prefill={prefill}
+        onPrefillUsed={() => setPrefill(null)}
       />
 
       <ColorRulesSettings
