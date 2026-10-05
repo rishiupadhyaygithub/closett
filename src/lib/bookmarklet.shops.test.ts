@@ -133,3 +133,63 @@ describe('bookmarklet portability', () => {
     expect(run('£')).toBe('GBP');
   });
 });
+
+describe('bookmarklet on a shop with no structured data and generic class names (Bewakoof)', () => {
+  const BEWAKOOF_LIKE = `
+<head><title>Buy Men's Beige Board Meeting Tee Online at Bewakoof</title>
+<meta property="og:image" content="https://images.bewakoof.com/original/a.jpg"></head>
+<body>
+  <div class="sc-banner">Get FLAT ₹100 OFF on all Prepaid orders</div>
+  <div class="sc-cart">₹0</div>
+  <h1>Men's Beige Board Meeting Tee</h1>
+  <h3 class="sc-d0df3db6">₹613</h3>
+  <span class="sc-9e333c87 line-through mr-2">₹1,799</span>
+  <b>₹550</b>
+</body>`;
+  const q = () => runOnPage(BEWAKOOF_LIKE, 'https://www.bewakoof.com/p/mens-beige-tee');
+  it('finds the selling price even when class names say nothing about price', () => expect(q().searchParams.get('p')).toBe('613'));
+  it('infers the currency from the symbol', () => expect(q().searchParams.get('c')).toBe('INR'));
+  it('skips a struck-through list price', () => {
+    const html = BEWAKOOF_LIKE.replace('<h3 class="sc-d0df3db6">₹613</h3>', '<del>₹1,799</del><h3>₹613</h3>');
+    expect(runOnPage(html, 'https://www.bewakoof.com/p/x').searchParams.get('p')).toBe('613');
+  });
+  it('ignores a banner sentence that merely mentions a rupee amount', () => {
+    const html = '<body><p>Get FLAT ₹100 OFF</p><h1>Tee</h1></body>';
+    expect(runOnPage(html, 'https://shop.example/p/1').searchParams.get('p')).toBe('');
+  });
+});
+
+describe('parsePrefill thumbnail upsizing (Shopify cdn)', () => {
+  const img = (u: string) => parsePrefill('?add=1&i=' + encodeURIComponent(u))!.images[0];
+  it('asks Shopify for a larger rendition when the page gave a tiny one', () => {
+    expect(img('https://levi.in/cdn/shop/files/a.jpg?v=1&width=192')).toBe('https://levi.in/cdn/shop/files/a.jpg?v=1&width=1200');
+  });
+  it('leaves a large Shopify width alone', () => {
+    expect(img('https://levi.in/cdn/shop/files/a.jpg?width=1500')).toBe('https://levi.in/cdn/shop/files/a.jpg?width=1500');
+  });
+  it('does not touch width parameters on other hosts', () => {
+    expect(img('https://img.example.com/a.jpg?width=192')).toBe('https://img.example.com/a.jpg?width=192');
+  });
+});
+
+describe('bookmarklet on a page with decoy headings and no meta tags (Amazon)', () => {
+  const AMAZON_LIKE = `
+<head><title>Buy BULLMER Printed Cotton Tshirt for Men - Pack of 3 at Amazon.in</title></head>
+<body>
+  <h1 class="a-offscreen">Product summary presents key product information Keyboard shortcut shift + alt + t</h1>
+  <span id="productTitle">   BULLMER Trendy Printed Cotton Blend Crew Neck Tshirt for Men - Pack of 3   </span>
+  <div id="imgTagWrapperId"><img id="landingImage" src="https://m.media-amazon.com/images/I/small._SX38_.jpg" data-old-hires="https://m.media-amazon.com/images/I/big._SL1500_.jpg"></div>
+  <span class="a-price"><span class="a-offscreen">₹473.00</span></span>
+</body>`;
+  const q = () => runOnPage(AMAZON_LIKE, 'https://www.amazon.in/BULLMER/dp/B0DJYJNTM3');
+  it('prefers the product title element over a decoy heading', () => {
+    expect(q().searchParams.get('t')).toBe('BULLMER Trendy Printed Cotton Blend Crew Neck Tshirt for Men - Pack of 3');
+  });
+  it('uses the high-resolution product image', () => {
+    expect(q().searchParams.get('i')).toBe('https://m.media-amazon.com/images/I/big._SL1500_.jpg');
+  });
+  it('never returns a very long heading as the title', () => {
+    const html = '<head><title>Real Title | Shop</title></head><body><h1>' + 'x '.repeat(200) + '</h1></body>';
+    expect(runOnPage(html, 'https://shop.example/p/1').searchParams.get('t')).toBe('Real Title | Shop');
+  });
+});
