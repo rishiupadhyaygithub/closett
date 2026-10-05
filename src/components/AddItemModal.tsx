@@ -7,6 +7,9 @@ import { guessCategory, guessGarmentType } from '../lib/guess';
 import { bookmarkletHref, type Prefill } from '../lib/bookmarklet';
 import { safeHttpUrl } from '../lib/url';
 import { downscaleDataUrl } from '../lib/downscale';
+import { parsePriceInput } from '../lib/price';
+import { flattenCategories } from '../lib/items';
+import { useModal } from '../lib/useModal';
 
 interface AddItemModalProps {
   isOpen: boolean;
@@ -41,6 +44,8 @@ export default function AddItemModal({
   const [color, setColor] = useState('');
   const [colorSuggested, setColorSuggested] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [imageError, setImageError] = useState('');
+  const [discardHint, setDiscardHint] = useState(false);
   const savingRef = useRef(false); // state is stale between two clicks in the same tick
   const [link, setLink] = useState('');
   const [notes, setNotes] = useState('');
@@ -111,9 +116,16 @@ export default function AddItemModal({
   }, [isOpen]);
 
   const handleImageFile = (file: File) => {
-    if (!file.type.startsWith('image/')) return;
+    setImageError('');
+    if (!file.type.startsWith('image/')) { setImageError('That file is not an image.'); return; }
+    if (file.size > 25 * 1024 * 1024) { setImageError('That image is over 25 MB. Pick a smaller one.'); return; }
     const reader = new FileReader();
-    reader.onload = async e => setImage(await downscaleDataUrl(e.target?.result as string));
+    reader.onload = async e => {
+      const url = await downscaleDataUrl(e.target?.result as string);
+      if (!url) { setImageError('Could not read that image. iPhone HEIC photos need converting to JPEG first, or take a screenshot of the photo.'); return; }
+      setImage(url);
+    };
+    reader.onerror = () => setImageError('Could not read that file.');
     reader.readAsDataURL(file);
   };
 
@@ -126,7 +138,7 @@ export default function AddItemModal({
     e.preventDefault();
     setIsDragging(false);
     const file = e.dataTransfer.files[0];
-    if (file && file.type.startsWith('image/')) handleImageFile(file);
+    if (file) handleImageFile(file);
   };
 
   const handleSave = async () => {
@@ -135,7 +147,7 @@ export default function AddItemModal({
       id: editingItem?.id || crypto.randomUUID(),
       image,
       title: title.trim(),
-      price: parseFloat(price) || 0,
+      price: parsePriceInput(price),
       currency: currency || 'INR',
       link: safeHttpUrl(link) ?? '',
       notes: notes.trim(),
@@ -164,6 +176,8 @@ export default function AddItemModal({
     setNotes('');
     setColor('');
     setColorSuggested(false);
+    setImageError('');
+    setDiscardHint(false);
     setGarmentType('other');
     setCategoryId(categories.find(c => c.id === 'uncategorized')?.id || categories[0]?.id || '');
   };
@@ -197,15 +211,25 @@ export default function AddItemModal({
     } catch { /* clipboard blocked: the drag-to-bookmarks-bar route still works */ }
   };
 
+  const isDirty = editingItem
+    ? title !== editingItem.title || image !== editingItem.image || notes !== editingItem.notes || link !== editingItem.link ||
+      color !== (editingItem.color || '') || garmentType !== (editingItem.garmentType || 'other') || categoryId !== editingItem.categoryId ||
+      price !== (editingItem.price ? editingItem.price.toString() : '')
+    : !!(image || title.trim() || price || notes.trim() || link.trim());
+
+  // Esc and a click outside must not silently throw away typed data; Cancel / ✕ still do so on purpose
+  const requestClose = () => { if (isDirty) setDiscardHint(true); else handleClose(); };
+  const modalRef = useModal(isOpen, requestClose);
+
   if (!isOpen) return null;
 
   return (
-    <div className="modal-overlay" onClick={handleClose}>
-      <div className="modal-box" onClick={e => e.stopPropagation()}>
+    <div className="modal-overlay" onClick={requestClose}>
+      <div ref={modalRef} className="modal-box" role="dialog" aria-modal="true" aria-labelledby="add-item-title" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="modal-header">
-          <h2 className="modal-title">{editingItem ? 'Edit Piece' : 'Add New Piece'}</h2>
-          <button onClick={handleClose} className="modal-close">✕</button>
+          <h2 id="add-item-title" className="modal-title">{editingItem ? 'Edit Piece' : 'Add New Piece'}</h2>
+          <button onClick={handleClose} className="modal-close" aria-label="Close">✕</button>
         </div>
 
         {/* Body */}
@@ -255,6 +279,7 @@ export default function AddItemModal({
                   onClick={e => { e.stopPropagation(); setImage(''); }}
                   className="drop-zone__remove"
                   title="Remove image"
+                  aria-label="Remove image"
                 >
                   ✕
                 </button>
@@ -267,6 +292,7 @@ export default function AddItemModal({
               </>
             )}
           </div>
+          {imageError && <p className="fetch-status fetch-status--error" role="alert">{imageError}</p>}
 
           {/* Title */}
           <div className="field-group">
@@ -286,12 +312,11 @@ export default function AddItemModal({
             <div className="field-group">
               <label className="field-label">Price ({currency})</label>
               <input
-                type="number"
+                type="text"
+                inputMode="decimal"
                 value={price}
                 onChange={e => setPrice(e.target.value)}
                 placeholder="0.00"
-                step="0.01"
-                min="0"
                 className="field-input"
               />
             </div>
@@ -372,6 +397,8 @@ export default function AddItemModal({
                     onClick={() => { setColor(''); setColorSuggested(false); }}
                     className={`color-chip color-chip--none ${!color ? 'color-chip--active' : ''}`}
                     title="No colour"
+                    aria-label="No colour"
+                    aria-pressed={!color}
                   >🚫</button>
                 </div>
               </div>
@@ -396,6 +423,8 @@ export default function AddItemModal({
                           <div key={c.id} className="color-chip-wrap" title={`${c.name}${rec === true ? ' ✓ Recommended for your undertone' : rec === false ? ' ✕ May clash with undertone' : ''}`}>
                             <button
                               type="button"
+                              aria-label={`${c.name}${rec === true ? ', recommended for your undertone' : rec === false ? ', may clash with your undertone' : ''}`}
+                              aria-pressed={color === c.id}
                               onClick={() => { setColor(c.id); setColorSuggested(false); }}
                               className={`color-chip ${color === c.id ? 'color-chip--active' : ''} ${rec === false ? 'color-chip--avoid' : ''}`}
                               style={{ backgroundColor: c.hex }}
@@ -446,8 +475,8 @@ export default function AddItemModal({
               onChange={e => setCategoryId(e.target.value)}
               className="field-input field-select"
             >
-              {categories.map(cat => (
-                <option key={cat.id} value={cat.id}>{cat.name}</option>
+              {flattenCategories(categories).map(cat => (
+                <option key={cat.id} value={cat.id}>{'\u00A0\u00A0'.repeat(cat.depth) + (cat.depth ? '↳ ' : '') + cat.name}</option>
               ))}
             </select>
           </div>
@@ -467,6 +496,7 @@ export default function AddItemModal({
 
         {/* Footer */}
         <div className="modal-footer">
+          {discardHint && <span className="discard-hint" role="status">Unsaved changes. Use Cancel to discard them.</span>}
           <button onClick={handleClose} className="btn-ghost">Cancel</button>
           <button
             onClick={handleSave}

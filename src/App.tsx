@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Category, Item, SortOption, ColorRule, UserProfile } from './types';
 import {
   getAllCategories,
@@ -15,23 +15,35 @@ import {
   getUserProfile,
   saveUserProfile,
   getUserProfileRemote,
+  saveUserProfileRemote,
 } from './db';
 import { supabase } from './lib/supabase';
 import { ensureSession } from './lib/session';
 import { runAction } from './lib/actions';
 import { parsePrefill, type Prefill } from './lib/bookmarklet';
+import { filterAndSortItems, categoryCounts } from './lib/items';
+import { decideProfileSync } from './lib/profileSync';
 import type { User } from '@supabase/supabase-js';
 import ItemCard from './components/ItemCard';
 import AddItemModal from './components/AddItemModal';
 import ClosetView from './components/ClosetView';
 import ColorRulesSettings from './components/ColorRulesSettings';
 import OnboardingModal from './components/OnboardingModal';
+import ImportModal from './components/ImportModal';
+import { saveLastBackup, loadLastBackup } from './lib/backup';
 import StyleProfileView from './components/StyleProfileView';
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const noticeTimer = useRef<ReturnType<typeof setTimeout>>();
+  const flash = useCallback((msg: string) => {
+    setNotice(msg);
+    clearTimeout(noticeTimer.current);
+    noticeTimer.current = setTimeout(() => setNotice(null), 3500);
+  }, []);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   // Product data from the "Add to Closett" bookmarklet arrives in the URL query
   const [prefill, setPrefill] = useState<Prefill | null>(() => parsePrefill(window.location.search));
@@ -79,12 +91,13 @@ function App() {
     };
     start();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       const u = session?.user ?? null;
       setUser(u);
       setAuthLoading(false);
       if (!u) {
         setCategories([]); setItems([]); setColorRules([]);
+        if (event === 'SIGNED_OUT') setErrorMsg('Your session ended, so this closet can no longer be reached. Reload the page to start a new one.');
       }
       // loadData + profile sync handled by useEffect([user]) below
     });
@@ -106,8 +119,11 @@ function App() {
   useEffect(() => {
     if (!user) return;
     loadData();
-    getUserProfileRemote().then(p => {
-      if (p) { saveUserProfile(p); setUserProfile(p); setShowOnboarding(false); }
+    getUserProfileRemote().then(remote => {
+      const local = getUserProfile();
+      const action = decideProfileSync(local, remote);
+      if (action === 'use-remote' && remote) { saveUserProfile(remote); setUserProfile(remote); setShowOnboarding(false); }
+      else if (action === 'push-local' && local) saveUserProfileRemote(local).catch(err => console.error('profile sync failed:', err));
     }).catch(() => {});
   }, [user, loadData]);
 
@@ -152,12 +168,14 @@ function App() {
     if (!ok) return false;
     setEditingItem(null);
     setIsAddModalOpen(false);
+    flash('Saved');
     return true;
   };
 
   const handleDeleteItem = async (id: string) => {
     if (!confirm('Delete this item?')) return;
-    await runAction(async () => { await deleteItem(id); await loadData(); }, setErrorMsg);
+    const ok = await runAction(async () => { await deleteItem(id); await loadData(); return true; }, setErrorMsg);
+    if (ok) flash('Deleted');
   };
 
   const handleExport = async () => {
@@ -174,39 +192,44 @@ function App() {
     URL.revokeObjectURL(url);
   };
 
-  const handleImport = async () => {
-    if (!importText.trim()) return;
-    const success = await importData(importText.trim());
+  // Importing replaces the closet, so keep a copy of the current one first
+  const backupBeforeImport = async () => {
+    try { saveLastBackup(await exportData()); } catch { /* offline: the import itself will fail too */ }
+  };
+
+  const finishImport = async (text: string) => {
+    await backupBeforeImport();
+    const success = await importData(text);
     if (success) {
       setShowImportModal(false);
       setImportText('');
-      loadData();
+      await loadData();
+      flash('Backup imported');
     } else {
-      alert('Failed to import. Please check the file format.');
+      setErrorMsg('That backup could not be imported. Your closet was not changed. Check that it is a Closett export.');
     }
   };
+
+  const handleImport = () => { if (importText.trim()) void finishImport(importText.trim()); };
 
   const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    
-    // Read the file but skip putting the raw GIANT text into the screen/textarea 
-    // to prevent the browser from freezing.
     try {
-      const text = await file.text();
-      const success = await importData(text);
-      if (success) {
-        setShowImportModal(false);
-        setImportText('');
-        loadData();
-        alert('Backup imported successfully!');
-      } else {
-        alert('Failed to import. Please check if the file is correctly formatted.');
-      }
-    } catch(err) {
+      await finishImport(await file.text());
+    } catch (err) {
       console.error(err);
-      alert('Error reading file.');
+      setErrorMsg('Could not read that file.');
     }
+  };
+
+  const handleRestoreBackup = async () => {
+    const backup = loadLastBackup();
+    if (!backup) return;
+    if (!confirm('Replace your current closet with the copy saved before the last import?')) return;
+    const ok = await importData(backup);
+    if (ok) { setShowImportModal(false); await loadData(); flash('Previous closet restored'); }
+    else setErrorMsg('Could not restore the backup.');
   };
 
   const getDescendantIds = (catId: string): string[] => {
@@ -228,10 +251,8 @@ function App() {
     });
   };
 
-  const getCategoryItemCount = (catId: string) => {
-    const allIds = [catId, ...getDescendantIds(catId)];
-    return items.filter(i => allIds.includes(i.categoryId)).length;
-  };
+  const counts = useMemo(() => categoryCounts(categories, items), [categories, items]);
+  const getCategoryItemCount = (catId: string) => counts.get(catId) ?? 0;
 
   const renderCategoryTree = (parentId: string | null = null, depth: number = 0) => {
     const children = categories.filter(c => c.parentId === parentId);
@@ -281,40 +302,14 @@ function App() {
     });
   };
 
-  const filteredAndSortedItems = () => {
-    let result = [...items];
-
-    if (selectedCategory) {
-      if (selectedCategory === 'uncategorized') {
-        result = result.filter(item => item.categoryId === 'uncategorized');
-      } else {
-        const allIds = [selectedCategory, ...getDescendantIds(selectedCategory)];
-        result = result.filter(item => allIds.includes(item.categoryId));
-      }
-    }
-
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      result = result.filter(
-        item =>
-          item.title.toLowerCase().includes(query) ||
-          item.notes.toLowerCase().includes(query)
-      );
-    }
-
-    switch (sortBy) {
-      case 'newest': result.sort((a, b) => b.createdAt - a.createdAt); break;
-      case 'oldest': result.sort((a, b) => a.createdAt - b.createdAt); break;
-      case 'priceAsc': result.sort((a, b) => a.price - b.price); break;
-      case 'priceDesc': result.sort((a, b) => b.price - a.price); break;
-      case 'nameAsc': result.sort((a, b) => a.title.localeCompare(b.title)); break;
-      case 'nameDesc': result.sort((a, b) => b.title.localeCompare(a.title)); break;
-    }
-
-    return result;
-  };
-
-  const displayItems = filteredAndSortedItems();
+  const categoryIds = useMemo(
+    () => (selectedCategory ? [selectedCategory, ...getDescendantIds(selectedCategory)] : null),
+    [selectedCategory, categories],
+  );
+  const displayItems = useMemo(
+    () => filterAndSortItems(items, { categoryIds, query: searchQuery, sortBy }),
+    [items, categoryIds, searchQuery, sortBy],
+  );
 
   if (authLoading) {
     return (
@@ -326,6 +321,7 @@ function App() {
 
   return (
     <div className="app-shell">
+      {notice && <div className="notice-banner" role="status">{notice}</div>}
       {errorMsg && (
         <div className="error-banner" role="alert">
           <span>{errorMsg}</span>
@@ -552,41 +548,23 @@ function App() {
 
       {/* ── Onboarding ── */}
       {showOnboarding && (
-        <OnboardingModal onComplete={handleOnboardingComplete} />
+        <OnboardingModal
+          onComplete={handleOnboardingComplete}
+          initial={userProfile ?? undefined}
+          onCancel={userProfile ? () => setShowOnboarding(false) : undefined}
+        />
       )}
 
-      {/* ── Import Modal ── */}
       {showImportModal && (
-        <div className="modal-overlay" onClick={() => { setShowImportModal(false); setImportText(''); }}>
-          <div className="modal-box" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2 className="modal-title">Import Backup</h2>
-              <button className="modal-close" onClick={() => { setShowImportModal(false); setImportText(''); }}>✕</button>
-            </div>
-            <div className="modal-body">
-              <label className="field-label">Upload .json file</label>
-              <input
-                type="file"
-                accept=".json"
-                onChange={handleImportFile}
-                className="file-input"
-              />
-              <label className="field-label mt">Or paste JSON directly</label>
-              <textarea
-                value={importText}
-                onChange={e => setImportText(e.target.value)}
-                placeholder='{"categories": [...], "items": [...]}'
-                rows={6}
-                className="text-area"
-              />
-              <p className="warning-text">⚠️ This will replace all current data. Export first if needed.</p>
-            </div>
-            <div className="modal-footer">
-              <button onClick={() => { setShowImportModal(false); setImportText(''); }} className="btn-ghost">Cancel</button>
-              <button onClick={handleImport} disabled={!importText.trim()} className="btn-primary">Import</button>
-            </div>
-          </div>
-        </div>
+        <ImportModal
+          text={importText}
+          onTextChange={setImportText}
+          onClose={() => { setShowImportModal(false); setImportText(''); }}
+          onFile={handleImportFile}
+          onImport={handleImport}
+          canRestore={loadLastBackup() !== null}
+          onRestore={handleRestoreBackup}
+        />
       )}
     </div>
   );
