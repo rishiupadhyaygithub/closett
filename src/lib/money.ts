@@ -2,7 +2,7 @@
 export function formatPrice(price: number, currency: string): string {
   if (!price) return 'No price';
   const code = /^[A-Z]{3}$/.test(currency) ? currency : 'INR';
-  const options = { style: 'currency' as const, minimumFractionDigits: 0, maximumFractionDigits: 2 };
+  const options = { style: 'currency' as const, minimumFractionDigits: Number.isInteger(price) ? 0 : 2, maximumFractionDigits: 2 };
   try {
     return new Intl.NumberFormat('en-IN', { ...options, currency: code }).format(price);
   } catch {

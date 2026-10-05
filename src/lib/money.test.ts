@@ -15,3 +15,8 @@ describe('formatPrice', () => {
   });
   it('falls back to INR when currency is empty', () => expect(formatPrice(100, '')).toContain('₹'));
 });
+
+describe('formatPrice decimals', () => {
+  it('shows two decimals for a non-integer price', () => expect(formatPrice(4999.5, 'INR')).toContain('4,999.50'));
+  it('shows no decimals for a whole price', () => expect(formatPrice(1299, 'INR')).not.toContain('.'));
+});

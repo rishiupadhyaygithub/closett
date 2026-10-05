@@ -5,7 +5,20 @@ interface AuthLike<U> {
   };
 }
 
-export async function ensureSession<U>(client: AuthLike<U>): Promise<{ user: U | null; error: string | null }> {
+type SessionResult<U> = { user: U | null; error: string | null };
+
+// React StrictMode runs effects twice in dev; without this, two sign-ins race and create two anonymous users.
+const inFlight = new WeakMap<object, Promise<SessionResult<any>>>();
+
+export function ensureSession<U>(client: AuthLike<U>): Promise<SessionResult<U>> {
+  const running = inFlight.get(client);
+  if (running) return running as Promise<SessionResult<U>>;
+  const p = startSession(client).finally(() => inFlight.delete(client));
+  inFlight.set(client, p);
+  return p;
+}
+
+async function startSession<U>(client: AuthLike<U>): Promise<SessionResult<U>> {
   try {
     const { data } = await client.auth.getSession();
     if (data.session?.user) return { user: data.session.user, error: null };
