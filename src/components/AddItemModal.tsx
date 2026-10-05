@@ -3,7 +3,7 @@ import { Item, Category, ColorRule, UserProfile } from '../types';
 import { COLOR_PALETTE, getColorName, isColorRecommended } from '../colorData';
 import { getBodyTypeAdvice } from '../bodyTypeData';
 import { suggestColorFromImage } from '../lib/imagePixels';
-import { firstLoadableImage } from '../lib/imageProbe';
+import { firstLoadableImage, fetchImageAsDataUrl } from '../lib/imageProbe';
 import { colorFromName } from '../lib/colorNames';
 import { guessCategory, guessGarmentType } from '../lib/guess';
 import { bookmarkletHref, type Prefill } from '../lib/bookmarklet';
@@ -200,9 +200,13 @@ export default function AddItemModal({
     if (data.link) setLink(data.link);
     if (data.images.length) {
       // Try each photo the page offered; shops differ in which ones can be loaded from another site
-      void firstLoadableImage(data.images).then(url => {
-        if (url) setImage(prev => prev || url);
-        else setImageError('Could not load the photo from that shop. Save the product photo and upload it here, or paste a screenshot.');
+      void firstLoadableImage(data.images).then(async url => {
+        if (url) {
+          // Keep our own copy when the shop allows it (links rot); otherwise keep the plain link
+          const local = await fetchImageAsDataUrl(url);
+          const copy = local ? await downscaleDataUrl(local) : null;
+          setImage(prev => prev || copy || url);
+        } else setImageError('Could not load the photo from that shop. Save the product photo and upload it here, or paste a screenshot.');
       });
     }
     const named = colorFromName(data.colorName);
