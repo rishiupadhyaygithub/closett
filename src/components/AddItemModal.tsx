@@ -49,6 +49,7 @@ export default function AddItemModal({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [copied, setCopied] = useState(false);
+  const [dragHint, setDragHint] = useState(false);
   const bookmarkletRef = useRef<HTMLAnchorElement>(null);
 
   useEffect(() => {
@@ -217,8 +218,12 @@ export default function AddItemModal({
               1. Drag <a
                 ref={bookmarkletRef}
                 className="bookmarklet-link"
-                onClick={e => { e.preventDefault(); alert('Drag this button to your bookmarks bar. Do not click it here.'); }}
-              >✦ Add to Closett</a> to your bookmarks bar.<br />
+                draggable
+                onClick={e => { e.preventDefault(); setDragHint(true); }}
+              >✦ Add to Closett</a> up onto your bookmarks bar (the row under the address bar).<br />
+              {dragHint && (
+                <strong className="bookmarklet-warning">↑ Don't click it here: press, hold, and drag it up to the bookmarks bar. Press Cmd+Shift+B if the bar is hidden.<br /></strong>
+              )}
               2. Open a product page (Zara, Myntra, anything) and click that bookmark.<br />
               The details land here, ready to review. On a phone, <button type="button" className="bookmarklet-copy" onClick={copyBookmarklet}>{copied ? 'Copied ✓' : 'copy the bookmark'}</button> and paste it as a bookmark's address.
             </p>
