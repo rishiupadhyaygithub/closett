@@ -201,6 +201,13 @@ describe('saveColorRules', () => {
 import { deleteCategory, saveUserProfileRemote } from './db';
 
 describe('deleteCategory', () => {
+  it('does nothing when the category list cannot be read (sub-collections would be orphaned)', async () => {
+    const move = makeBuilder(OK);
+    h.from.mockReturnValueOnce(makeBuilder(FAIL)).mockReturnValueOnce(move);
+    await expect(deleteCategory('c1')).rejects.toThrow('read categories: boom');
+    expect(move.update).not.toHaveBeenCalled();
+  });
+
   const cats = [
     { id: 'c1', user_id: 'u1', name: 'A', sort_order: 0, parent_id: null },
     { id: 'c2', user_id: 'u1', name: 'B', sort_order: 1, parent_id: 'c1' },
@@ -264,5 +271,17 @@ describe('signed-out session', () => {
   it('explains what happened instead of "Not authenticated"', async () => {
     h.getSession.mockResolvedValue({ data: { session: null } });
     await expect(addItem(ITEM)).rejects.toThrow(/session ended.*reload/i);
+  });
+});
+
+import { getColorRules } from './db';
+
+describe('getColorRules', () => {
+  it('fails instead of overwriting custom rules with defaults when the read fails', async () => {
+    const write = makeBuilder(OK);
+    h.from.mockReturnValueOnce(makeBuilder(FAIL)).mockReturnValue(write);
+    await expect(getColorRules()).rejects.toThrow('read color rules: boom');
+    expect(write.upsert).not.toHaveBeenCalled();
+    expect(write.delete).not.toHaveBeenCalled();
   });
 });

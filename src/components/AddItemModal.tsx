@@ -77,7 +77,14 @@ export default function AddItemModal({
       resetForm();
       if (isOpen && prefill) applyPrefill(prefill);
     }
-  }, [editingItem, categories, isOpen, prefill]);
+  }, [editingItem, isOpen, prefill]); // not categories: a data reload must never wipe what the user typed
+
+  // Categories can arrive after the form opened; fill the default only when nothing is chosen yet
+  useEffect(() => {
+    if (!categoryId && categories.length) {
+      setCategoryId(categories.find(c => c.id === 'uncategorized')?.id || categories[0].id);
+    }
+  }, [categories, categoryId]);
 
   // React refuses javascript: hrefs, so the bookmarklet link is set on the element directly
   useEffect(() => {

@@ -71,7 +71,7 @@ export async function updateCategory(category: Category): Promise<void> {
 
 export async function deleteCategory(id: string): Promise<void> {
   const uid = await currentUserId();
-  const { data: cats } = await supabase.from('categories').select('*').eq('user_id', uid);
+  const { data: cats } = must(await supabase.from('categories').select('*').eq('user_id', uid), 'read categories');
   const allCats = (cats || []).map(rowToCategory);
 
   const toDelete = new Set<string>([id]);
@@ -159,7 +159,7 @@ export async function getItemsByCategory(categoryId: string): Promise<Item[]> {
 
 export async function getColorRules(): Promise<ColorRule[]> {
   const uid = await currentUserId();
-  const { data } = await supabase.from('color_rules').select('*').eq('user_id', uid);
+  const { data } = must(await supabase.from('color_rules').select('*').eq('user_id', uid), 'read color rules');
   if (!data || data.length === 0) {
     await saveColorRules(DEFAULT_COLOR_RULES);
     return DEFAULT_COLOR_RULES;
