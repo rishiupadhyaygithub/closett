@@ -5,6 +5,7 @@ const h = vi.hoisted(() => ({
   from: vi.fn(),
   remove: vi.fn(),
   getSession: vi.fn(),
+  upload: vi.fn(),
 }));
 
 vi.mock('./lib/supabase', () => ({
@@ -13,10 +14,10 @@ vi.mock('./lib/supabase', () => ({
     auth: { getSession: h.getSession },
     storage: { from: () => ({ remove: h.remove }) },
   },
-  uploadImage: vi.fn(),
+  uploadImage: h.upload,
 }));
 
-import { addItem, deleteItem, must, storagePathFromUrl } from './db';
+import { addItem, deleteItem, must, storagePathFromUrl, updateItem } from './db';
 import type { Item } from './types';
 
 const ITEM: Item = {
@@ -56,6 +57,51 @@ describe('addItem', () => {
   it('rejects when the insert fails', async () => {
     h.from.mockReturnValue(makeBuilder(FAIL));
     await expect(addItem(ITEM)).rejects.toThrow('insert item: boom');
+  });
+});
+
+describe('updateItem photo replacement', () => {
+  const NEW_URL = 'https://x.supabase.co/storage/v1/object/public/item-images/u1/i1-abc.jpeg';
+  beforeEach(() => { h.upload.mockReset(); h.upload.mockResolvedValue(NEW_URL); });
+
+  it('removes the old stored file after a new photo is saved', async () => {
+    h.from
+      .mockReturnValueOnce(makeBuilder({ data: { image: BUCKET_URL }, error: null }))
+      .mockReturnValueOnce(makeBuilder(OK));
+    await updateItem({ ...ITEM, image: 'data:image/jpeg;base64,AAAA' });
+    expect(h.remove).toHaveBeenCalledWith(['u1/i1.png']);
+  });
+
+  it('removes the old stored file when the photo is swapped for a shop link', async () => {
+    h.from
+      .mockReturnValueOnce(makeBuilder({ data: { image: BUCKET_URL }, error: null }))
+      .mockReturnValueOnce(makeBuilder(OK));
+    await updateItem({ ...ITEM, image: 'https://cdn.zara.com/a.jpg' });
+    expect(h.remove).toHaveBeenCalledWith(['u1/i1.png']);
+  });
+
+  it('keeps the file when the photo did not change', async () => {
+    h.from
+      .mockReturnValueOnce(makeBuilder({ data: { image: BUCKET_URL }, error: null }))
+      .mockReturnValueOnce(makeBuilder(OK));
+    await updateItem({ ...ITEM, image: BUCKET_URL });
+    expect(h.remove).not.toHaveBeenCalled();
+  });
+
+  it('keeps the old file when the row update fails', async () => {
+    h.from
+      .mockReturnValueOnce(makeBuilder({ data: { image: BUCKET_URL }, error: null }))
+      .mockReturnValueOnce(makeBuilder(FAIL));
+    await expect(updateItem({ ...ITEM, image: 'data:image/jpeg;base64,AAAA' })).rejects.toThrow('update item: boom');
+    expect(h.remove).not.toHaveBeenCalled();
+  });
+
+  it('still saves when removing the old file fails', async () => {
+    h.remove.mockResolvedValue({ error: { message: 'storage down' } });
+    h.from
+      .mockReturnValueOnce(makeBuilder({ data: { image: BUCKET_URL }, error: null }))
+      .mockReturnValueOnce(makeBuilder(OK));
+    await expect(updateItem({ ...ITEM, image: 'data:image/jpeg;base64,AAAA' })).resolves.toBeUndefined();
   });
 });
 
