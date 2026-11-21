@@ -32,10 +32,18 @@ import OnboardingModal from './components/OnboardingModal';
 import ImportModal from './components/ImportModal';
 import { saveLastBackup, loadLastBackup } from './lib/backup';
 import StyleProfileView from './components/StyleProfileView';
+import RecoveryScreen from './components/RecoveryScreen';
+import { keepSameUser } from './lib/authUser';
+import { saveAutoBackup, loadAutoBackup } from './lib/autoBackup';
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  // This browser's sign-in points at a closet that no longer exists: ask before starting over
+  const [lostSession, setLostSession] = useState(false);
+  const [recovering, setRecovering] = useState(false);
+  // Auth events are ignored until the stored sign-in has been checked with the server, so a dead account never loads or writes data
+  const sessionChecked = useRef(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const noticeTimer = useRef<ReturnType<typeof setTimeout>>();
@@ -84,20 +92,24 @@ function App() {
   // Auth listener — no login screen; auto sign-in anonymously
   useEffect(() => {
     const start = async () => {
-      const { user: u, error } = await ensureSession(supabase);
-      setUser(u);
+      const { user: u, error, lostSession: lost } = await ensureSession(supabase);
+      setUser(prev => keepSameUser(prev, u));
+      if (lost) setLostSession(true);
       if (error) setErrorMsg(error);
+      sessionChecked.current = true;
       setAuthLoading(false);
     };
     start();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!sessionChecked.current) return;
       const u = session?.user ?? null;
-      setUser(u);
+      // The same sign-in is re-announced every time the tab becomes visible; only a different account should reload data
+      setUser(prev => keepSameUser(prev, u));
       setAuthLoading(false);
       if (!u) {
         setCategories([]); setItems([]); setColorRules([]);
-        if (event === 'SIGNED_OUT') setErrorMsg('Your session ended, so this closet can no longer be reached. Reload the page to start a new one.');
+        if (event === 'SIGNED_OUT') setLostSession(true);
       }
       // loadData + profile sync handled by useEffect([user]) below
     });
@@ -110,6 +122,7 @@ function App() {
       setCategories(cats);
       setItems(its);
       setColorRules(rules);
+      saveAutoBackup({ categories: cats, items: its, colorRules: rules });
     } catch (err) {
       console.error('loadData failed:', err);
       setErrorMsg(err instanceof Error ? err.message : 'Could not load your closet.');
@@ -232,6 +245,30 @@ function App() {
     else setErrorMsg('Could not restore the backup.');
   };
 
+  // Lost session: start a new anonymous closet, then optionally fill it from a backup
+  const recoverInto = async (backupJson: string | null) => {
+    setRecovering(true);
+    try {
+      const { user: u, error } = await ensureSession(supabase);
+      if (!u) { setErrorMsg(error ?? 'Could not start a new closet.'); return; }
+      setUser(u);
+      setLostSession(false);
+      if (backupJson) {
+        if (await importData(backupJson)) { await loadData(); flash('Closet restored'); }
+        else setErrorMsg('That backup could not be restored. Your new closet is empty; try another backup file.');
+      }
+    } finally {
+      setRecovering(false);
+    }
+  };
+
+  const handleRecoveryFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try { await recoverInto(await file.text()); }
+    catch { setErrorMsg('Could not read that file.'); }
+  };
+
   const getDescendantIds = (catId: string): string[] => {
     const children = categories.filter(c => c.parentId === catId);
     let ids = children.map(c => c.id);
@@ -315,6 +352,27 @@ function App() {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--bg-base)', color: 'var(--text-muted)', fontFamily: 'Playfair Display, serif', fontSize: 20 }}>
         ✦ Closett
+      </div>
+    );
+  }
+
+  if (lostSession && !user) {
+    const autoBackup = loadAutoBackup();
+    return (
+      <div className="app-shell">
+        {errorMsg && (
+          <div className="error-banner" role="alert">
+            <span>{errorMsg}</span>
+            <button onClick={() => setErrorMsg(null)} aria-label="Dismiss">✕</button>
+          </div>
+        )}
+        <RecoveryScreen
+          backup={autoBackup}
+          busy={recovering}
+          onRestoreBackup={() => autoBackup && recoverInto(autoBackup.json)}
+          onRestoreFile={handleRecoveryFile}
+          onStartFresh={() => recoverInto(null)}
+        />
       </div>
     );
   }
