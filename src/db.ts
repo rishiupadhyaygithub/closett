@@ -259,7 +259,8 @@ async function pruneMissing(table: string, uid: string, keepIds: string[]): Prom
   must(await (keepIds.length ? q.not('id', 'in', `(${keepIds.join(',')})`) : q), `prune ${table}`);
 }
 
-export async function importData(jsonString: string): Promise<boolean> {
+/** replace (default): the closet becomes exactly the backup. merge: add the backup's pieces, delete nothing, keep current colour rules. */
+export async function importData(jsonString: string, { mode = 'replace' }: { mode?: 'replace' | 'merge' } = {}): Promise<boolean> {
   try {
     const data = validateBackup(JSON.parse(jsonString));
     const uid = await currentUserId();
@@ -283,6 +284,7 @@ export async function importData(jsonString: string): Promise<boolean> {
     const opts = { onConflict: 'user_id,id' };
     if (cats.length)  must(await supabase.from('categories').upsert(cats, opts), 'import categories');
     if (its.length)   must(await supabase.from('items').upsert(its, opts), 'import items');
+    if (mode === 'merge') return true;
     if (rules.length) must(await supabase.from('color_rules').upsert(rules, opts), 'import color rules');
 
     await pruneMissing('categories', uid, cats.map((c: any) => c.id));

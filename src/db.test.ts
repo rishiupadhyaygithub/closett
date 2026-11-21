@@ -285,3 +285,20 @@ describe('getColorRules', () => {
     expect(write.delete).not.toHaveBeenCalled();
   });
 });
+
+describe('importData merge mode (pieces from another browser added to a saved closet)', () => {
+  it('adds categories and items without deleting anything already there', async () => {
+    const b = makeBuilder(OK);
+    h.from.mockReturnValue(b);
+    expect(await importData(GOOD, { mode: 'merge' })).toBe(true);
+    expect(b.upsert).toHaveBeenCalledTimes(2);
+    expect(b.delete).not.toHaveBeenCalled();
+  });
+
+  it('keeps the saved closet colour rules instead of the incoming ones', async () => {
+    const b = makeBuilder(OK);
+    h.from.mockReturnValue(b);
+    await importData(GOOD, { mode: 'merge' });
+    expect(h.from).not.toHaveBeenCalledWith('color_rules');
+  });
+});

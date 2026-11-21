@@ -80,3 +80,16 @@ export function flattenCategories(categories: Category[]): { id: string; name: s
   for (const c of categories) if (!seen.has(c.id)) { seen.add(c.id); out.push({ id: c.id, name: c.name, depth: 0 }); } // cycles
   return out;
 }
+
+/** Ids of every collection nested under `id` (any depth). Safe on accidental parent cycles. */
+export function descendantIds(categories: Category[], id: string): string[] {
+  const found = new Set<string>();
+  const queue = [id];
+  while (queue.length) {
+    const parent = queue.shift()!;
+    for (const c of categories) {
+      if (c.parentId === parent && !found.has(c.id)) { found.add(c.id); queue.push(c.id); }
+    }
+  }
+  return [...found];
+}

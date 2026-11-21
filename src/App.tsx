@@ -21,7 +21,7 @@ import { supabase } from './lib/supabase';
 import { ensureSession } from './lib/session';
 import { runAction } from './lib/actions';
 import { parsePrefill, type Prefill } from './lib/bookmarklet';
-import { filterAndSortItems, categoryCounts } from './lib/items';
+import { filterAndSortItems, categoryCounts, descendantIds } from './lib/items';
 import { decideProfileSync } from './lib/profileSync';
 import type { User } from '@supabase/supabase-js';
 import ItemCard from './components/ItemCard';
@@ -34,7 +34,13 @@ import { saveLastBackup, loadLastBackup } from './lib/backup';
 import StyleProfileView from './components/StyleProfileView';
 import RecoveryScreen from './components/RecoveryScreen';
 import { keepSameUser } from './lib/authUser';
-import { saveAutoBackup, loadAutoBackup } from './lib/autoBackup';
+import { saveAutoBackup, loadAutoBackup, clearAutoBackup } from './lib/autoBackup';
+import Sidebar, { type View } from './components/Sidebar';
+import MainHeader from './components/MainHeader';
+import MergeOfferModal from './components/MergeOfferModal';
+import AccountModal, { type AccountMode } from './components/AccountModal';
+import { accountStatus, saveClosetWithEmail, sendSignInLink } from './lib/account';
+import { savePendingMerge, takePendingMerge, type PendingMerge } from './lib/pendingMerge';
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -42,6 +48,11 @@ function App() {
   // This browser's sign-in points at a closet that no longer exists: ask before starting over
   const [lostSession, setLostSession] = useState(false);
   const [recovering, setRecovering] = useState(false);
+  // True after the user deliberately signed out of a saved closet (the recovery screen then says "Signed out")
+  const signedOutOnPurpose = useRef(false);
+  const [accountMode, setAccountMode] = useState<AccountMode | null>(null);
+  // Pieces from this browser waiting to be added to the saved closet the user just signed in to
+  const [mergeOffer, setMergeOffer] = useState<PendingMerge | null>(null);
   // Auth events are ignored until the stored sign-in has been checked with the server, so a dead account never loads or writes data
   const sessionChecked = useRef(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -63,15 +74,10 @@ function App() {
   const [sortBy, setSortBy] = useState<SortOption>('newest');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Item | null>(null);
-  
-  const [newCategoryName, setNewCategoryName] = useState('');
-  const [showAddCategory, setShowAddCategory] = useState(false);
-  const [categoryToAddChildTo, setCategoryToAddChildTo] = useState<string | null>(null);
-  const [openCategories, setOpenCategories] = useState<Set<string>>(new Set());
 
   const [showImportModal, setShowImportModal] = useState(false);
   const [importText, setImportText] = useState('');
-  const [activeView, setActiveView] = useState<'grid' | 'closet' | 'style'>('grid');
+  const [activeView, setActiveView] = useState<View>('grid');
   const [showColorRulesSettings, setShowColorRulesSettings] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(() => getUserProfile());
   // Shows if profile is missing OR missing undertone (added later — forces re-onboarding for existing users)
@@ -132,6 +138,8 @@ function App() {
   useEffect(() => {
     if (!user) return;
     loadData();
+    const offer = takePendingMerge(user.id);
+    if (offer) setMergeOffer(offer);
     getUserProfileRemote().then(remote => {
       const local = getUserProfile();
       const action = decideProfileSync(local, remote);
@@ -140,26 +148,45 @@ function App() {
     }).catch(() => {});
   }, [user, loadData]);
 
-  const handleAddCategory = async () => {
-    if (!newCategoryName.trim()) return;
-    const newCategory: Category = {
-      id: crypto.randomUUID(),
-      name: newCategoryName.trim(),
-      order: categories.length,
-      parentId: categoryToAddChildTo,
-    };
+  const handleAddCategory = async (name: string, parentId: string | null): Promise<boolean> => {
+    const newCategory: Category = { id: crypto.randomUUID(), name, order: categories.length, parentId };
     const ok = await runAction(async () => {
       await addCategory(newCategory);
       await loadData();
       return true;
     }, setErrorMsg);
-    if (!ok) return;
-    setNewCategoryName('');
-    setShowAddCategory(false);
-    setCategoryToAddChildTo(null);
-    if (categoryToAddChildTo) {
-      setOpenCategories(prev => new Set(prev).add(categoryToAddChildTo));
+    return ok === true;
+  };
+
+  const handleAccountSubmit = async (email: string) => {
+    const redirect = window.location.origin;
+    if (accountMode === 'save') {
+      const r = await saveClosetWithEmail(supabase, email, redirect);
+      if (r.ok) {
+        const { data } = await supabase.auth.getUser();
+        if (data.user) setUser(prev => keepSameUser(prev, data.user));
+      }
+      return r;
     }
+    // Signing in from a closet that has its own pieces: remember them so they can be merged afterwards
+    if (user && user.is_anonymous && items.length > 0) {
+      savePendingMerge({ fromUserId: user.id, json: JSON.stringify({ categories, items, colorRules }), itemCount: items.length });
+    }
+    return sendSignInLink(supabase, email, redirect);
+  };
+
+  const handleSignOut = async () => {
+    if (!confirm('Sign out on this browser? Your saved closet stays safe; sign in again with your email any time.')) return;
+    signedOutOnPurpose.current = true;
+    clearAutoBackup();
+    await supabase.auth.signOut({ scope: 'local' });
+  };
+
+  const handleMerge = async (offer: PendingMerge) => {
+    setMergeOffer(null);
+    const ok = await importData(offer.json, { mode: 'merge' });
+    if (ok) { await loadData(); flash(`Added ${offer.itemCount} piece${offer.itemCount !== 1 ? 's' : ''} from this browser`); }
+    else setErrorMsg('Could not add the pieces from this browser. They are still in the backup file you can export from the old closet.');
   };
 
   const handleDeleteCategory = async (id: string) => {
@@ -269,78 +296,11 @@ function App() {
     catch { setErrorMsg('Could not read that file.'); }
   };
 
-  const getDescendantIds = (catId: string): string[] => {
-    const children = categories.filter(c => c.parentId === catId);
-    let ids = children.map(c => c.id);
-    children.forEach(c => {
-      ids = ids.concat(getDescendantIds(c.id));
-    });
-    return ids;
-  };
-
-  const toggleCategory = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setOpenCategories(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
 
   const counts = useMemo(() => categoryCounts(categories, items), [categories, items]);
-  const getCategoryItemCount = (catId: string) => counts.get(catId) ?? 0;
-
-  const renderCategoryTree = (parentId: string | null = null, depth: number = 0) => {
-    const children = categories.filter(c => c.parentId === parentId);
-    return children.sort((a,b) => a.order - b.order).map(cat => {
-      const hasChildren = categories.some(c => c.parentId === cat.id);
-      const isExpanded = openCategories.has(cat.id);
-      
-      return (
-        <div key={cat.id} className="nav-item-tree" style={{ marginLeft: `${depth > 0 ? 0.75 : 0}rem` }}>
-          <div className="nav-item-group-row">
-             {hasChildren ? (
-                <button 
-                  className="tree-toggle" 
-                  onClick={(e) => toggleCategory(cat.id, e)}
-                >
-                  {isExpanded ? '▼' : '▶'}
-                </button>
-             ) : (
-                <span className="tree-toggle-placeholder" />
-             )}
-             <button
-               className={`nav-item tree-nav-item ${selectedCategory === cat.id ? 'nav-item--active' : ''}`}
-               onClick={() => setSelectedCategory(cat.id)}
-             >
-                <div className="nav-item-content">
-                  <span className="nav-item-icon">{depth === 0 ? '◇' : '↳'}</span>
-                  <span className="nav-item-label">{cat.name}</span>
-                </div>
-                <span className="nav-item-count">{getCategoryItemCount(cat.id)}</span>
-             </button>
-             <div className="nav-item-actions">
-               {cat.id !== 'uncategorized' && (
-                 <>
-                   <button onClick={() => { setCategoryToAddChildTo(cat.id); setShowAddCategory(true); }} className="tree-action-btn" title="Add sub-collection">+</button>
-                   <button onClick={() => handleDeleteCategory(cat.id)} className="tree-action-btn" title="Delete">×</button>
-                 </>
-               )}
-             </div>
-          </div>
-          {isExpanded && hasChildren && (
-             <div className="tree-children">
-               {renderCategoryTree(cat.id, depth + 1)}
-             </div>
-          )}
-        </div>
-      );
-    });
-  };
 
   const categoryIds = useMemo(
-    () => (selectedCategory ? [selectedCategory, ...getDescendantIds(selectedCategory)] : null),
+    () => (selectedCategory ? [selectedCategory, ...descendantIds(categories, selectedCategory)] : null),
     [selectedCategory, categories],
   );
   const displayItems = useMemo(
@@ -367,12 +327,17 @@ function App() {
           </div>
         )}
         <RecoveryScreen
+          variant={signedOutOnPurpose.current ? 'signedOut' : 'lost'}
+          onSignIn={() => setAccountMode('signin')}
           backup={autoBackup}
           busy={recovering}
           onRestoreBackup={() => autoBackup && recoverInto(autoBackup.json)}
           onRestoreFile={handleRecoveryFile}
-          onStartFresh={() => recoverInto(null)}
+          onStartFresh={() => { signedOutOnPurpose.current = false; recoverInto(null); }}
         />
+        {accountMode && (
+          <AccountModal mode="signin" localItemCount={0} onSubmit={email => sendSignInLink(supabase, email, window.location.origin)} onClose={() => setAccountMode(null)} />
+        )}
       </div>
     );
   }
@@ -386,151 +351,46 @@ function App() {
           <button onClick={() => setErrorMsg(null)} aria-label="Dismiss">✕</button>
         </div>
       )}
-      {/* ── Sidebar ── */}
-      {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}
-      <aside className={`sidebar ${sidebarOpen ? 'sidebar--open' : ''}`}>
-        <div className="sidebar-brand">
-          <span className="brand-icon">✦</span>
-          <span className="brand-name">Closett</span>
-        </div>
-
-        <nav
-          className="sidebar-nav"
-          onClick={e => { if ((e.target as HTMLElement).closest('.nav-item')) setSidebarOpen(false); }}
-        >
-          <p className="nav-label">Collections</p>
-          <button
-            onClick={() => { setActiveView('style'); setSelectedCategory(null); }}
-            className={`nav-item ${activeView === 'style' ? 'nav-item--active' : ''}`}
-          >
-            <span className="nav-item-icon">◈</span>
-            <span>My Style</span>
-          </button>
-          <button
-            onClick={() => { setActiveView('grid'); setSelectedCategory(null); }}
-            className={`nav-item ${activeView === 'grid' && selectedCategory === null ? 'nav-item--active' : ''}`}
-          >
-            <span className="nav-item-icon">◈</span>
-            <span>All Pieces</span>
-            <span className="nav-item-count">{items.length}</span>
-          </button>
-
-          {renderCategoryTree(null)}
-
-          {/* Add root category inline */}
-          <div className="add-category-section">
-            {showAddCategory ? (
-              <div className="add-category-form">
-                <input
-                  type="text"
-                  value={newCategoryName}
-                  onChange={e => setNewCategoryName(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleAddCategory()}
-                  placeholder={categoryToAddChildTo ? "Sub-collection name…" : "Collection name…"}
-                  className="add-category-input"
-                  autoFocus
-                />
-                <div className="add-category-actions">
-                  <button onClick={handleAddCategory} className="btn-confirm">✓</button>
-                  <button onClick={() => { setShowAddCategory(false); setNewCategoryName(''); setCategoryToAddChildTo(null); }} className="btn-cancel">✕</button>
-                </div>
-              </div>
-            ) : (
-              <button onClick={() => { setCategoryToAddChildTo(null); setShowAddCategory(true); }} className="btn-add-category">
-                + Root Collection
-              </button>
-            )}
-          </div>
-        </nav>
-
-        <div className="sidebar-footer">
-          <button onClick={() => setShowOnboarding(true)} className="footer-btn footer-btn--profile" title="Edit your profile">
-            {userProfile ? (
-              <>◈ {userProfile.skinTone.charAt(0).toUpperCase() + userProfile.skinTone.slice(1)} · {userProfile.undertone}</>
-            ) : '◈ My Profile'}
-          </button>
-          <button onClick={() => setShowColorRulesSettings(true)} className="footer-btn" title="Color Settings">
-            ⚙️ Rules
-          </button>
-          <button onClick={handleExport} className="footer-btn" title="Export backup">
-            ↓ Export
-          </button>
-          <button onClick={() => setShowImportModal(true)} className="footer-btn" title="Import backup">
-            ↑ Import
-          </button>
-        </div>
-      </aside>
+      <Sidebar
+        open={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        categories={categories}
+        totalItems={items.length}
+        counts={counts}
+        selectedCategory={selectedCategory}
+        activeView={activeView}
+        onSelectCategory={setSelectedCategory}
+        onSelectView={setActiveView}
+        onAddCategory={handleAddCategory}
+        onDeleteCategory={handleDeleteCategory}
+        userProfile={userProfile}
+        onEditProfile={() => setShowOnboarding(true)}
+        onOpenRules={() => setShowColorRulesSettings(true)}
+        onExport={handleExport}
+        onOpenImport={() => setShowImportModal(true)}
+        account={accountStatus(user)}
+        onSaveCloset={() => setAccountMode('save')}
+        onSignIn={() => setAccountMode('signin')}
+        onSignOut={handleSignOut}
+      />
 
       {/* ── Main Content ── */}
       <main className="main-content">
-        {/* Header */}
-        <header className="main-header">
-          <div className="header-left">
-            <button className="menu-btn" onClick={() => setSidebarOpen(true)} aria-label="Open menu">☰</button>
-            <h1 className="page-title">
-              {activeView === 'style'
-                ? 'My Style'
-                : activeView === 'closet'
-                ? 'Closet Matcher'
-                : selectedCategory
-                ? categories.find(c => c.id === selectedCategory)?.name ?? 'Collection'
-                : 'All Pieces'}
-            </h1>
-            {activeView === 'grid' && (
-              <span className="page-subtitle">{displayItems.length} item{displayItems.length !== 1 ? 's' : ''}</span>
-            )}
-          </div>
-          <div className="header-right">
-            {activeView !== 'style' && (
-              <div className="view-toggle">
-                <button
-                  className={`view-btn ${activeView === 'grid' ? 'active' : ''}`}
-                  onClick={() => setActiveView('grid')}
-                >
-                  ⊞ Grid
-                </button>
-                <button
-                  className={`view-btn ${activeView === 'closet' ? 'active' : ''}`}
-                  onClick={() => setActiveView('closet')}
-                >
-                  ✦ Closet
-                </button>
-              </div>
-            )}
-            {activeView === 'grid' && (
-              <>
-                <div className="search-wrap">
-                  <span className="search-icon">⌕</span>
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={e => setSearchQuery(e.target.value)}
-                    placeholder="Search pieces…"
-                    className="search-input"
-                  />
-                </div>
-                <select
-                  value={sortBy}
-                  onChange={e => setSortBy(e.target.value as SortOption)}
-                  className="sort-select"
-                >
-                  <option value="newest">Newest first</option>
-                  <option value="oldest">Oldest first</option>
-                  <option value="priceAsc">Price ↑</option>
-                  <option value="priceDesc">Price ↓</option>
-                  <option value="nameAsc">Name A–Z</option>
-                  <option value="nameDesc">Name Z–A</option>
-                </select>
-              </>
-            )}
-            <button
-              onClick={() => { setEditingItem(null); setIsAddModalOpen(true); }}
-              className="btn-add-item"
-            >
-              + Add Piece
-            </button>
-          </div>
-        </header>
+        <MainHeader
+          title={activeView === 'style' ? 'My Style'
+            : activeView === 'closet' ? 'Closet Matcher'
+            : selectedCategory ? categories.find(c => c.id === selectedCategory)?.name ?? 'Collection'
+            : 'All Pieces'}
+          activeView={activeView}
+          itemCount={displayItems.length}
+          searchQuery={searchQuery}
+          sortBy={sortBy}
+          onOpenMenu={() => setSidebarOpen(true)}
+          onSelectView={setActiveView}
+          onSearch={setSearchQuery}
+          onSort={setSortBy}
+          onAddPiece={() => { setEditingItem(null); setIsAddModalOpen(true); }}
+        />
 
         {/* Content Area */}
         {activeView === 'style' ? (
@@ -603,6 +463,14 @@ function App() {
           await runAction(async () => { await saveColorRules(rules); await loadData(); }, setErrorMsg);
         }}
       />
+
+      {accountMode && (
+        <AccountModal mode={accountMode} localItemCount={items.length} onSubmit={handleAccountSubmit} onClose={() => setAccountMode(null)} />
+      )}
+
+      {mergeOffer && (
+        <MergeOfferModal itemCount={mergeOffer.itemCount} onMerge={() => handleMerge(mergeOffer)} onDiscard={() => setMergeOffer(null)} />
+      )}
 
       {/* ── Onboarding ── */}
       {showOnboarding && (

@@ -38,3 +38,14 @@ describe('automatic closet backup', () => {
     expect(() => saveAutoBackup({ categories: CAT, items: [item('1')], colorRules: [] }, full, 1)).not.toThrow();
   });
 });
+
+import { clearAutoBackup } from './autoBackup';
+
+describe('clearAutoBackup', () => {
+  it('removes the browser copy (used when signing out of a saved closet)', () => {
+    const s = { ...storage, removeItem: (k: string) => { mem.delete(k); } };
+    saveAutoBackup({ categories: CAT, items: [item('1')], colorRules: [] }, s, 1);
+    clearAutoBackup(s);
+    expect(loadAutoBackup(s)).toBeNull();
+  });
+});
