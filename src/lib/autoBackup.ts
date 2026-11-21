@@ -19,3 +19,8 @@ export function loadAutoBackup(storage: StorageLike = localStorage): AutoBackup 
     return typeof b.json === 'string' && typeof b.itemCount === 'number' && typeof b.savedAt === 'number' ? (b as AutoBackup) : null;
   } catch { return null; }
 }
+
+/** Signing out of a saved closet: it is safe on the server, so leave no copy in this browser. */
+export function clearAutoBackup(storage: Pick<Storage, 'removeItem'> = localStorage): void {
+  try { storage.removeItem(KEY); } catch { /* storage blocked */ }
+}

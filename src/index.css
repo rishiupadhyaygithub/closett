@@ -2595,3 +2595,25 @@ body {
 /* ── Lost-session recovery ── */
 .recovery-text { color: var(--text-secondary, var(--text-muted)); font-size: 14px; line-height: 1.55; margin-bottom: 16px; }
 .recovery-option { width: 100%; margin-bottom: 12px; white-space: normal; text-align: left; }
+
+/* ── Save my closet ── */
+.sidebar-account {
+  padding: 12px 12px 0;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.sidebar-account .footer-btn { flex: none; width: 100%; }
+.footer-btn--save { color: var(--accent); border-color: var(--accent); font-weight: 600; }
+.account-line {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.account-sent { margin-top: 10px; font-size: 13px; color: var(--accent); line-height: 1.5; }
+.field-error { margin-top: 8px; font-size: 13px; color: var(--danger); }
+.account-line--wrap { white-space: normal; }

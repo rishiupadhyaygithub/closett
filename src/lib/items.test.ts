@@ -61,3 +61,20 @@ describe('flattenCategories', () => {
     expect(() => flattenCategories(cyc)).not.toThrow();
   });
 });
+
+import { descendantIds } from './items';
+
+describe('descendantIds', () => {
+  const cats = [
+    { id: 'a', name: 'A', order: 0, parentId: null },
+    { id: 'b', name: 'B', order: 0, parentId: 'a' },
+    { id: 'c', name: 'C', order: 0, parentId: 'b' },
+    { id: 'd', name: 'D', order: 0, parentId: null },
+  ];
+  it('returns children and grandchildren', () => expect(descendantIds(cats, 'a').sort()).toEqual(['b', 'c']));
+  it('returns nothing for a leaf', () => expect(descendantIds(cats, 'd')).toEqual([]));
+  it('does not loop forever on a cycle', () => {
+    const cyclic = [{ id: 'x', name: 'X', order: 0, parentId: 'y' }, { id: 'y', name: 'Y', order: 0, parentId: 'x' }];
+    expect(descendantIds(cyclic, 'x').sort()).toEqual(['x', 'y']);
+  });
+});
