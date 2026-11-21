@@ -120,6 +120,7 @@ export async function addItem(item: Item): Promise<void> {
 
 export async function updateItem(item: Item): Promise<void> {
   const uid = await currentUserId();
+  const { data: before } = await supabase.from('items').select('image').eq('id', item.id).eq('user_id', uid).maybeSingle();
   let imageUrl = item.image;
   if (imageUrl.startsWith('data:')) {
     imageUrl = await uploadImage(uid, item.id, imageUrl);
@@ -129,6 +130,12 @@ export async function updateItem(item: Item): Promise<void> {
     link: item.link, notes: item.notes, category_id: item.categoryId,
     color: item.color, garment_type: item.garmentType,
   }).eq('id', item.id).eq('user_id', uid), 'update item');
+
+  const oldPath = before?.image ? storagePathFromUrl(String(before.image)) : null;
+  if (oldPath && oldPath !== storagePathFromUrl(imageUrl)) {
+    const { error } = await supabase.storage.from('item-images').remove([oldPath]);
+    if (error) console.warn('old image cleanup failed:', error.message);
+  }
 }
 
 export async function deleteItem(id: string): Promise<void> {
