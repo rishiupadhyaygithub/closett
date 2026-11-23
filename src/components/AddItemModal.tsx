@@ -4,7 +4,7 @@ import { COLOR_PALETTE, getColorName, isColorRecommended } from '../colorData';
 import { getBodyTypeAdvice } from '../bodyTypeData';
 import { suggestColorFromImage } from '../lib/imagePixels';
 import { firstLoadableImage, fetchImageAsDataUrl } from '../lib/imageProbe';
-import { colorFromName } from '../lib/colorNames';
+import { pickColor } from '../lib/colorNames';
 import { guessCategory, guessGarmentType } from '../lib/guess';
 import { bookmarkletHref, bookmarkletOrigin, type Prefill } from '../lib/bookmarklet';
 import { safeHttpUrl } from '../lib/url';
@@ -216,7 +216,7 @@ export default function AddItemModal({
         } else setImageError('Could not load the photo from that shop. Save the product photo and upload it here, or paste a screenshot.');
       });
     }
-    const named = colorFromName(data.colorName);
+    const named = pickColor(data.colorName, data.title);
     if (named) { setColor(named); setColorSuggested(false); setColorFromPage(true); }
     const guessedType = guessGarmentType(data.title, '', data.link);
     if (guessedType !== 'other') setGarmentType(guessedType);
