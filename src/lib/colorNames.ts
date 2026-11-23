@@ -25,7 +25,7 @@ export function colorFromName(name: string): string | null {
 }
 
 /** Brand names and fabric terms that contain a colour word but say nothing about the colour. */
-const NOT_A_COLOUR = /\b(?:red\s*tape|black\s*berrys|blackberrys|blue\s*tokai|true\s*blue|stone[\s-]*wash(?:ed)?|acid[\s-]*wash(?:ed)?)\b/gi;
+const NOT_A_COLOUR = /\b(?:red\s*tape|red\s*chief|red\s*wing|black\s*berrys|blackberrys|blue\s*tokai|true\s*blue|stone[\s-]*wash(?:ed)?|acid[\s-]*wash(?:ed)?)\b/gi;
 
 /**
  * Colour for a new piece: the page's own colour when it names one, else a colour word in the
