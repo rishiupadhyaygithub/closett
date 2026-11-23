@@ -1,26 +1,39 @@
 const TIMEOUT_MS = 8000;
 
-/** Does the browser manage to load this image? No referrer is sent, which defeats most hotlink checks. */
-function domProbe(url: string): Promise<boolean> {
+/** Width of the image once loaded, 0 when it fails. No referrer is sent, which defeats most hotlink checks. */
+function domProbe(url: string): Promise<number> {
   return new Promise(resolve => {
     const img = new Image();
     img.referrerPolicy = 'no-referrer';
-    const timer = setTimeout(() => resolve(false), TIMEOUT_MS);
-    img.onload = () => { clearTimeout(timer); resolve(img.naturalWidth > 1); };
-    img.onerror = () => { clearTimeout(timer); resolve(false); };
+    const timer = setTimeout(() => resolve(0), TIMEOUT_MS);
+    img.onload = () => { clearTimeout(timer); resolve(img.naturalWidth > 1 ? img.naturalWidth : 0); };
+    img.onerror = () => { clearTimeout(timer); resolve(0); };
     img.src = url;
   });
 }
 
-/** First url in the list that actually loads, or null. A probe that throws counts as a failed image. */
+/** Photos narrower than this are thumbnails (Ajio hands over a 78px one first). */
+const MIN_WIDTH = 300;
+
+/**
+ * First url in the list that loads at a usable size; when only thumbnails load, the widest of them;
+ * null when none load. A probe answers true (loaded, size unknown), a width, or 0/false (failed);
+ * a probe that throws counts as a failed image.
+ */
 export async function firstLoadableImage(
   urls: string[],
-  probe: (url: string) => Promise<boolean> = domProbe,
+  probe: (url: string) => Promise<boolean | number> = domProbe,
 ): Promise<string | null> {
+  let best: { url: string; width: number } | null = null;
   for (const url of urls) {
-    try { if (await probe(url)) return url; } catch { /* try the next one */ }
+    let r: boolean | number = 0;
+    try { r = await probe(url); } catch { /* try the next one */ }
+    if (r === true) return url;
+    const width = typeof r === 'number' ? r : 0;
+    if (width >= MIN_WIDTH) return url;
+    if (width > 0 && (!best || width > best.width)) best = { url, width };
   }
-  return null;
+  return best?.url ?? null;
 }
 
 const MAX_DOWNLOAD_BYTES = 8 * 1024 * 1024;

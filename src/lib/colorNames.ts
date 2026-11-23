@@ -23,3 +23,16 @@ export function colorFromName(name: string): string | null {
   }
   return null;
 }
+
+/** Brand names and fabric terms that contain a colour word but say nothing about the colour. */
+const NOT_A_COLOUR = /\b(?:red\s*tape|black\s*berrys|blackberrys|blue\s*tokai|true\s*blue|stone[\s-]*wash(?:ed)?|acid[\s-]*wash(?:ed)?)\b/gi;
+
+/**
+ * Colour for a new piece: the page's own colour when it names one, else a colour word in the
+ * product title. A page "colour" that lists several (Snitch lists every variant) is ignored.
+ */
+export function pickColor(pageColor: string, title: string): string | null {
+  const isList = /[,/|]/.test(pageColor);
+  const fromPage = !isList && pageColor ? colorFromName(pageColor) : null;
+  return fromPage ?? colorFromName(title.replace(NOT_A_COLOUR, ' '));
+}

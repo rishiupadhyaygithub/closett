@@ -18,3 +18,14 @@ describe('firstLoadableImage', () => {
     expect(await firstLoadableImage(['bad', 'good'], probe)).toBe('good');
   });
 });
+
+describe('firstLoadableImage skips thumbnails', () => {
+  const widths: Record<string, number> = { thumb: 78, big: 473, other: 900, small2: 120 };
+  const probe = async (u: string) => widths[u] ?? 0;
+  it('passes over a tiny thumbnail when a bigger photo follows (Ajio gives a 78px one first)', async () =>
+    expect(await firstLoadableImage(['thumb', 'big', 'other'], probe)).toBe('big'));
+  it('falls back to the biggest small photo when nothing is big', async () =>
+    expect(await firstLoadableImage(['thumb', 'small2', 'missing'], probe)).toBe('small2'));
+  it('still returns null when nothing loads', async () =>
+    expect(await firstLoadableImage(['missing'], probe)).toBeNull());
+});
