@@ -6,7 +6,7 @@ import { suggestColorFromImage } from '../lib/imagePixels';
 import { firstLoadableImage, fetchImageAsDataUrl } from '../lib/imageProbe';
 import { colorFromName } from '../lib/colorNames';
 import { guessCategory, guessGarmentType } from '../lib/guess';
-import { bookmarkletHref, type Prefill } from '../lib/bookmarklet';
+import { bookmarkletHref, bookmarkletOrigin, type Prefill } from '../lib/bookmarklet';
 import { safeHttpUrl } from '../lib/url';
 import { downscaleDataUrl } from '../lib/downscale';
 import { parsePriceInput } from '../lib/price';
@@ -88,7 +88,7 @@ export default function AddItemModal({
 
   // React refuses javascript: hrefs, so the bookmarklet link is set on the element directly
   useEffect(() => {
-    bookmarkletRef.current?.setAttribute('href', bookmarkletHref(window.location.origin));
+    bookmarkletRef.current?.setAttribute('href', bookmarkletHref(bookmarkletOrigin(window.location.origin)));
   }, [isOpen]);
 
   // Suggest a colour from the photo, but never overwrite a colour the user picked
@@ -229,7 +229,7 @@ export default function AddItemModal({
 
   const copyBookmarklet = async () => {
     try {
-      await navigator.clipboard.writeText(bookmarkletHref(window.location.origin));
+      await navigator.clipboard.writeText(bookmarkletHref(bookmarkletOrigin(window.location.origin)));
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
     } catch { /* clipboard blocked: the drag-to-bookmarks-bar route still works */ }
@@ -268,7 +268,7 @@ export default function AddItemModal({
                 className="bookmarklet-link"
                 draggable
                 onClick={e => { e.preventDefault(); setDragHint(true); }}
-              >✦ Add to Closett</a> up onto your bookmarks bar (the row under the address bar).<br />
+              >✦ Add to Closett</a> up onto your bookmarks bar (the row under the address bar). It opens <strong>{new URL(bookmarkletOrigin(window.location.origin)).host}</strong>; delete any older button that opens "localhost".<br />
               {dragHint && (
                 <strong className="bookmarklet-warning">↑ Don't click it here: press, hold, and drag it up to the bookmarks bar. Press Cmd+Shift+B if the bar is hidden.<br /></strong>
               )}
