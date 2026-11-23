@@ -44,6 +44,10 @@ function Shelf({ id, label, hint, rows, selectedId, onPick, card }: ShelfProps) 
               className={`shelf__slot${onPick && selectedId === r.item.id ? ' shelf__slot--picked' : ''}`}
               onMouseEnter={onPick ? () => onPick(r.item) : undefined}
               onClick={onPick ? () => onPick(r.item) : undefined}
+              // Keyboard: Tab onto a top (or any of its buttons) to match with it
+              onFocus={onPick ? () => onPick(r.item) : undefined}
+              tabIndex={onPick ? 0 : undefined}
+              aria-label={onPick ? `Match outfits with ${r.item.title}` : undefined}
             >
               {card(r, id === 'tops' ? selectedId === r.item.id : r.match)}
             </div>
