@@ -79,3 +79,8 @@ describe('assessItem: stripes', () => {
     expect(assessItem(item({ title: 'Breton Striped Top' }), oval).avoid).toBe(true);
   });
 });
+it('flags rugby and hooped stripes as horizontal', () => {
+  const oval: UserProfile = { ...me, bodyType: 'oval' };
+  expect(assessItem(item({ title: 'Rugby Stripe Polo' }), oval).avoid).toBe(true);
+  expect(assessItem(item({ title: 'Hooped Tee' }), oval).avoid).toBe(true);
+});

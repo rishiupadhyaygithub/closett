@@ -40,3 +40,7 @@ describe('pickColor: more brand names', () => {
   });
   it('still reads a real colour after a brand name', () => expect(pickColor('', 'Red Chief Brown Boots')).toBe('brown'));
 });
+it('ignores hyphenated brand spellings', () => {
+  expect(pickColor('', 'Red-Tape Men Casual Sneakers')).toBeNull();
+  expect(pickColor('', 'Red-Chief Boots')).toBeNull();
+});

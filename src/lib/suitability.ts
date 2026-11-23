@@ -28,7 +28,7 @@ const FIT_TERMS: { advice: RegExp; title: RegExp }[] = [
   { advice: /high-waisted/i, title: /\bhigh[- ]?(?:waist(?:ed)?|rise)\b/i },
   { advice: /double-breasted/i, title: /\bdouble[- ]breasted\b/i },
   // Only horizontal stripes are ever advised against; a plain "striped" title does not say which way.
-  { advice: /horizontal stripe/i, title: /\b(?:horizontal(?:ly)?[\s-]*strip|breton)/i },
+  { advice: /horizontal stripe/i, title: /\b(?:horizontal(?:ly)?[\s-]*strip|breton|rugby[\s-]*strip|hoop(?:ed|s)?)/i },
   { advice: /off-shoulder/i, title: /\boff[- ]shoulder\b/i },
   { advice: /epaulette/i, title: /\bepaulet/i },
   { advice: /boat neck/i, title: /\bboat[- ]?neck/i },
