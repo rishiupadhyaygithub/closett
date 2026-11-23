@@ -16,11 +16,35 @@ const CATEGORY_RULES: { category: string; re: RegExp }[] = [
   { category: 'accessories', re: w('watch(?:es)?|necklaces?|bracelets?|rings?|earrings?|accessor(?:y|ies)|sunglasses|caps?|hats?|belts?|scarf|scarves|dupattas?|stoles?') },
 ];
 
-const text = (title: string, description: string, url: string) => `${title} ${description} ${url}`.toLowerCase();
+/** Position just after the last match of re in s, or -1. */
+function lastMatchEnd(re: RegExp, s: string): number {
+  const g = new RegExp(re.source, 'g');
+  let end = -1;
+  for (let m = g.exec(s); m; m = g.exec(s)) end = m.index + m[0].length;
+  return end;
+}
+
+/**
+ * Title first, then description, then URL: brand names in URLs ("buda-jeans-co-...-t-shirt") must not
+ * outvote the title. Within one source the garment word nearest the end wins, since product titles
+ * end with the noun ("Washed Jeans Jacket"); ties keep rule order.
+ */
+function pick<T>(rules: { re: RegExp; value: T }[], title: string, description: string, url: string): T | undefined {
+  for (const src of [title, description, url]) {
+    const s = src.toLowerCase();
+    let best: T | undefined;
+    let bestEnd = -1;
+    for (const r of rules) {
+      const end = lastMatchEnd(r.re, s);
+      if (end > bestEnd) { bestEnd = end; best = r.value; }
+    }
+    if (best !== undefined) return best;
+  }
+  return undefined;
+}
 
 export function guessCategory(title: string, description: string, url: string): string {
-  const t = text(title, description, url);
-  return CATEGORY_RULES.find(r => r.re.test(t))?.category ?? '';
+  return pick(CATEGORY_RULES.map(r => ({ re: r.re, value: r.category })), title, description, url) ?? '';
 }
 
 const GARMENT_RULES: { type: GarmentType; re: RegExp }[] = [
@@ -32,6 +56,5 @@ const GARMENT_RULES: { type: GarmentType; re: RegExp }[] = [
 
 /** Closet role for the outfit builder, guessed from product text. 'other' when unsure. */
 export function guessGarmentType(title: string, description: string, url: string): GarmentType {
-  const t = text(title, description, url);
-  return GARMENT_RULES.find(r => r.re.test(t))?.type ?? 'other';
+  return pick(GARMENT_RULES.map(r => ({ re: r.re, value: r.type })), title, description, url) ?? 'other';
 }
