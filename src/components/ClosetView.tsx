@@ -44,8 +44,12 @@ function Shelf({ id, label, hint, rows, selectedId, onPick, card }: ShelfProps) 
               className={`shelf__slot${onPick && selectedId === r.item.id ? ' shelf__slot--picked' : ''}`}
               onMouseEnter={onPick ? () => onPick(r.item) : undefined}
               onClick={onPick ? () => onPick(r.item) : undefined}
-              // Keyboard: Tab onto a top (or any of its buttons) to match with it
-              onFocus={onPick ? () => onPick(r.item) : undefined}
+              // Keyboard: Tab onto a top, then Enter or Space to match with it. Passing by does not re-sort.
+              onKeyDown={onPick ? e => {
+                if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onPick(r.item); }
+              } : undefined}
+              role={onPick ? 'button' : undefined}
+              aria-pressed={onPick ? selectedId === r.item.id : undefined}
               tabIndex={onPick ? 0 : undefined}
               aria-label={onPick ? `Match outfits with ${r.item.title}` : undefined}
             >
