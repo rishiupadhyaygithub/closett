@@ -109,3 +109,17 @@
 
 /* The shelf already names the category; the badge would sit under the card buttons. */
 .shelf .item-card__category { display: none; }
+
+/* Phones: keep the photo first but leave room to see the verdict without scrolling far. */
+@media (max-width: 768px) and (orientation: portrait) {
+  .info-photo img { max-height: 42vh; }
+}
+
+/* Keyboard users: show the card buttons when focus is inside the card, and mark the focused top. */
+.item-card:focus-within .item-card__actions,
+.item-card:focus-within .item-card__open-link { opacity: 1; }
+.shelf__slot:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: var(--radius-lg); }
+
+/* Empty wardrobe: same side margins as the shelves. */
+.main-content > .closet-empty { margin: 20px 32px; }
+@media (max-width: 768px) { .main-content > .closet-empty { margin: 14px 16px; } }

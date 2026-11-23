@@ -65,3 +65,22 @@ describe('assessItem: no profile', () => {
     expect(assessItem(item({ title: 'Skinny jeans', garmentType: 'bottom', color: 'beige' }), null)).toEqual({ avoid: false, issues: [], goods: [] });
   });
 });
+
+// Found by FullAppAudit 2026-11-23: "avoid horizontal stripes" flagged every striped piece, even the
+// vertical stripes the same build is told to wear.
+describe('assessItem: stripes', () => {
+  const oval: UserProfile = { ...me, bodyType: 'oval' };
+  it('does not flag vertical stripes for a build that avoids horizontal ones', () =>
+    expect(assessItem(item({ title: 'Vertical Stripe Shirt' }), oval).issues.filter(i => i.kind === 'fit')).toEqual([]));
+  it('does not guess the direction of a plain "striped" piece', () =>
+    expect(assessItem(item({ title: 'Striped Linen Shirt' }), oval).issues.filter(i => i.kind === 'fit')).toEqual([]));
+  it('flags horizontal and Breton stripes', () => {
+    expect(assessItem(item({ title: 'Horizontal Stripe Tee' }), oval).avoid).toBe(true);
+    expect(assessItem(item({ title: 'Breton Striped Top' }), oval).avoid).toBe(true);
+  });
+});
+it('flags rugby and hooped stripes as horizontal', () => {
+  const oval: UserProfile = { ...me, bodyType: 'oval' };
+  expect(assessItem(item({ title: 'Rugby Stripe Polo' }), oval).avoid).toBe(true);
+  expect(assessItem(item({ title: 'Hooped Tee' }), oval).avoid).toBe(true);
+});

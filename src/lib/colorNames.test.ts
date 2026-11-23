@@ -32,3 +32,15 @@ describe('pickColor', () => {
   it('does not read stone-washed as a stone colour', () => expect(pickColor('', 'Stone Washed Jeans')).toBeNull());
   it('returns null when nothing names a colour', () => expect(pickColor('', 'H&M Loose Jeans')).toBeNull());
 });
+
+describe('pickColor: more brand names', () => {
+  it('ignores Red Chief and Red Wing', () => {
+    expect(pickColor('', 'Red Chief Leather Boots')).toBeNull();
+    expect(pickColor('', 'Red Wing Iron Ranger')).toBeNull();
+  });
+  it('still reads a real colour after a brand name', () => expect(pickColor('', 'Red Chief Brown Boots')).toBe('brown'));
+});
+it('ignores hyphenated brand spellings', () => {
+  expect(pickColor('', 'Red-Tape Men Casual Sneakers')).toBeNull();
+  expect(pickColor('', 'Red-Chief Boots')).toBeNull();
+});
