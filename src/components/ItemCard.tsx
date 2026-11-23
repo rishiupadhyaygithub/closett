@@ -1,19 +1,31 @@
-import { Item } from '../types';
+import { useMemo, useState } from 'react';
+import { Item, UserProfile } from '../types';
 import { getColorHex, getColorName } from '../colorData';
 import { safeHttpUrl } from '../lib/url';
 import { formatPrice } from '../lib/money';
+import { assessItem } from '../lib/suitability';
+import ItemInfoModal from './ItemInfoModal';
 
 interface ItemCardProps {
   item: Item;
   categoryName: string;
   onEdit: () => void;
   onDelete: () => void;
+  userProfile?: UserProfile | null;
+  /** Wardrobe view: marks a piece that goes with the chosen top. */
+  highlight?: boolean;
 }
 
-export default function ItemCard({ item, categoryName, onEdit, onDelete }: ItemCardProps) {
+export default function ItemCard({ item, categoryName, onEdit, onDelete, userProfile = null, highlight = false }: ItemCardProps) {
   const link = safeHttpUrl(item.link);
+  const [showInfo, setShowInfo] = useState(false);
+  const assessment = useMemo(() => assessItem(item, userProfile), [item, userProfile]);
+  const why = assessment.issues.map(i => i.text).join(' · ');
   return (
-    <div className="item-card">
+    <div
+      className={`item-card${assessment.avoid ? ' item-card--avoid' : ''}${highlight ? ' item-card--match' : ''}`}
+      title={assessment.avoid ? `Not recommended: ${why}` : undefined}
+    >
       <div className="item-card__image-wrap">
         <img
           src={item.image}
@@ -30,6 +42,12 @@ export default function ItemCard({ item, categoryName, onEdit, onDelete }: ItemC
 
         {/* Action buttons */}
         <div className="item-card__actions">
+          <button onClick={() => setShowInfo(true)} className="action-btn action-btn--info" title="Info" aria-label={`Info about ${item.title}`}>
+            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="9" strokeWidth={2} />
+              <path strokeLinecap="round" strokeWidth={2} d="M12 11v5M12 8h.01" />
+            </svg>
+          </button>
           <button onClick={onEdit} className="action-btn action-btn--edit" title="Edit" aria-label={`Edit ${item.title}`}>
             <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -74,7 +92,18 @@ export default function ItemCard({ item, categoryName, onEdit, onDelete }: ItemC
         {item.notes && (
           <p className="item-card__notes">{item.notes}</p>
         )}
+        {assessment.avoid && <p className="item-card__avoid">✕ Not for you</p>}
       </div>
+      {showInfo && (
+        <ItemInfoModal
+          item={item}
+          categoryName={categoryName}
+          assessment={assessment}
+          hasProfile={!!userProfile}
+          onEdit={onEdit}
+          onClose={() => setShowInfo(false)}
+        />
+      )}
     </div>
   );
 }

@@ -431,8 +431,7 @@ function App() {
           <div className="items-grid">
             {displayItems.map(item => (
               <ItemCard
-                key={item.id}
-                item={item}
+                key={item.id} item={item} userProfile={userProfile}
                 categoryName={categories.find(c => c.id === item.categoryId)?.name || 'Uncategorized'}
                 onEdit={() => { setEditingItem(item); setIsAddModalOpen(true); }}
                 onDelete={() => handleDeleteItem(item.id)}
