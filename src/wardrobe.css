@@ -109,3 +109,8 @@
 
 /* The shelf already names the category; the badge would sit under the card buttons. */
 .shelf .item-card__category { display: none; }
+
+/* Phones: keep the photo first but leave room to see the verdict without scrolling far. */
+@media (max-width: 768px) {
+  .info-photo img { max-height: 42vh; }
+}
