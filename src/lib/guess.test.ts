@@ -31,3 +31,12 @@ describe('guessing from real shop data (brand words and URLs must not win)', () 
   it('falls back to the URL when the title has no garment word', () =>
     expect(guessGarmentType('CAHOOT Comfort Buffalo Checks', '', 'https://www.myntra.com/shirts/cahoot/x/123/buy')).toBe('top'));
 });
+
+// Regression: ISSUE-001 — "H&M Grey Overshirt" was guessed as "other" and landed on the Accessories shelf
+// Found by /qa on 2026-11-23
+describe('guessing layers that are named after shirts or fills', () => {
+  it.each(['H&M Grey Overshirt', 'Corduroy Shacket', 'Black Puffer', 'Quilted Gilet', 'Beige Trench', 'Linen Nehru Jacket', 'Nehru vest'])(
+    '%s is a layer', title => expect(guessGarmentType(title, '', '')).toBe('layer'));
+  it('an overshirt files under outerwear', () => expect(guessCategory('H&M Grey Overshirt', '', '')).toBe('outerwear'));
+  it('a plain shirt is still a top', () => expect(guessGarmentType('Oxford shirt', '', '')).toBe('top'));
+});
