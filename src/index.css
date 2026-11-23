@@ -1114,52 +1114,6 @@ body {
   color: var(--accent);
 }
 
-.closet-view {
-  display: flex;
-  flex-direction: column;
-  gap: 30px;
-}
-
-.closet-filters {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 20px;
-  background: var(--bg-elevated);
-  border-radius: var(--radius);
-  border: 1px solid var(--border);
-}
-
-.closet-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.closet-section {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.closet-section__title {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-family: 'Playfair Display', serif;
-  font-size: 24px;
-  font-weight: 500;
-  color: var(--text-primary);
-}
-
-.closet-section__subtitle {
-  font-size: 13px;
-  color: var(--text-muted);
-  margin-top: -8px;
-}
-
 .count-badge {
   background: var(--accent-dim);
   color: var(--accent);
@@ -1168,29 +1122,6 @@ body {
   border-radius: 20px;
   font-family: 'Inter', sans-serif;
   font-weight: 600;
-}
-
-.closet-scroll-row {
-  display: flex;
-  gap: 20px;
-  overflow-x: auto;
-  padding-bottom: 20px;
-  scroll-snap-type: x mandatory;
-}
-
-.closet-item-wrapper {
-  width: 240px;
-  flex-shrink: 0;
-  scroll-snap-align: start;
-}
-
-.closet-section__empty {
-  color: var(--text-muted);
-  font-size: 14px;
-  padding: 20px;
-  background: var(--bg-elevated);
-  border-radius: var(--radius);
-  border: 1px dashed var(--border);
 }
 
 .closet-empty {
@@ -1704,71 +1635,10 @@ body {
 }
 
 /* Closet Matcher tone header */
-.closet-filters-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.closet-tone-hint {
-  font-size: 11px;
-  color: var(--text-muted);
-  margin: -4px 0 4px;
-}
 
 /* ─────────────────────────────────────────
    Closet Outfit Flow
 ───────────────────────────────────────── */
-.closet-outfit-flow {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
-
-.closet-section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
-}
-
-.closet-step-badge {
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--text-muted);
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  padding: 3px 8px;
-  border-radius: 20px;
-}
-
-.closet-section__title--layer  { color: var(--text-secondary); }
-.closet-section__title--accent { color: var(--text-secondary); }
-
-.closet-flow-arrow {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-muted);
-  text-align: center;
-  padding: 16px 0 20px;
-  letter-spacing: 0.05em;
-  position: relative;
-}
-
-.closet-flow-arrow::before,
-.closet-flow-arrow::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  width: 1px;
-  background: var(--border);
-}
-
-.closet-flow-arrow::before { top: 0; height: 14px; }
-.closet-flow-arrow::after  { bottom: 0; height: 14px; }
 
 /* ─────────────────────────────────────────
    Colour Picker Grouped
