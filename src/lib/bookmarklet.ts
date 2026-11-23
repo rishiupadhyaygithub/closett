@@ -16,6 +16,21 @@ export interface Prefill {
 
 const MAX_TITLE = 200;
 
+/** The deployed app. Bookmarks must never point at a dev server, which is off most of the time. */
+export const LIVE_ORIGIN = 'https://closett-delta.vercel.app';
+
+/** Origin the "Add to Closett" button should open: this site when it is a real https host, otherwise the live site. */
+export function bookmarkletOrigin(currentOrigin: string): string {
+  try {
+    const u = new URL(currentOrigin);
+    const h = u.hostname;
+    const local = h === 'localhost' || h === '0.0.0.0' || h === '[::1]' || /^127\./.test(h) || h.endsWith('.local');
+    return u.protocol === 'https:' && !local ? u.origin : LIVE_ORIGIN;
+  } catch {
+    return LIVE_ORIGIN;
+  }
+}
+
 /**
  * Source of the "Add to Closett" bookmarklet. It runs inside the shop's own page, in the user's
  * real browser (so bot checks such as Zara's pass), reads the product data, and opens Closett with
